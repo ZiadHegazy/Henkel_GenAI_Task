@@ -1,0 +1,10 @@
+langchain
+langgraph
+chainlit
+qdrant-client
+langchain-qdrant
+langchain-groq
+langchain-google-genai
+unstructured[pdf]
+pydantic
+python-dotenv
