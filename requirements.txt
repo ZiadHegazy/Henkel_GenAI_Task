@@ -1,4 +1,7 @@
 langchain
+langchain-core
+langchain-community
+langchain-text-splitters
 langgraph
 chainlit
 qdrant-client

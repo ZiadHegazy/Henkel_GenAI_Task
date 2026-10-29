@@ -234,17 +234,45 @@ def split_blocks_into_chunks(
     """
     try:
         from langchain_text_splitters import RecursiveCharacterTextSplitter
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=["\n\n", "\n", ". ", "; ", ", ", " "],
+            keep_separator=True,
+        )
     except ImportError:
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        try:
+            from langchain.text_splitter import RecursiveCharacterTextSplitter
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separators=["\n\n", "\n", ". ", "; ", ", ", " "],
+                keep_separator=True,
+            )
+        except ImportError:
+            logger.warning(
+                "Neither langchain_text_splitters nor langchain.text_splitter found. "
+                "Using built-in robust character splitter."
+            )
+            class SimpleRecursiveSplitter:
+                def __init__(self, size: int, overlap: int):
+                    self.size = size
+                    self.overlap = overlap
+                def split_text(self, txt: str) -> List[str]:
+                    res = []
+                    start = 0
+                    length = len(txt)
+                    step = max(1, self.size - self.overlap)
+                    while start < length:
+                        end = min(start + self.size, length)
+                        res.append(txt[start:end])
+                        if end == length:
+                            break
+                        start += step
+                    return res
+            splitter = SimpleRecursiveSplitter(size=chunk_size, overlap=chunk_overlap)
 
     from langchain_core.documents import Document
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ". ", "; ", ", ", " "],
-        keep_separator=True,
-    )
 
     all_chunks: List[Document] = []
 
