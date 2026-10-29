@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -36,24 +37,19 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
 
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
+        self._init_db_sync()
 
-    @asynccontextmanager
-    async def _get_db(self) -> AsyncGenerator[aiosqlite.Connection, None]:
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            yield db
-
-    async def setup(self) -> None:
-        """Initialize database tables on application startup."""
-        async with self._get_db() as db:
-            await db.execute("""
+    def _init_db_sync(self) -> None:
+        """Synchronously ensure tables exist on instantiation to eliminate race conditions."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     identifier TEXT PRIMARY KEY,
                     createdAt TEXT,
                     metadata TEXT
                 )
             """)
-            await db.execute("""
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS threads (
                     id TEXT PRIMARY KEY,
                     createdAt TEXT,
@@ -64,7 +60,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     metadata TEXT
                 )
             """)
-            await db.execute("""
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS steps (
                     id TEXT PRIMARY KEY,
                     threadId TEXT,
@@ -75,7 +71,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     createdAt TEXT
                 )
             """)
-            await db.execute("""
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS elements (
                     id TEXT PRIMARY KEY,
                     threadId TEXT,
@@ -85,7 +81,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     chainlitKey TEXT
                 )
             """)
-            await db.execute("""
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS feedback (
                     id TEXT PRIMARY KEY,
                     threadId TEXT,
@@ -93,8 +89,18 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     comment TEXT
                 )
             """)
-            await db.commit()
-            logger.info("SQLite Chat Database initialized at: %s", self.db_path)
+            conn.commit()
+            logger.info("SQLite Chat Database schema verified synchronously at: %s", self.db_path)
+
+    @asynccontextmanager
+    async def _get_db(self) -> AsyncGenerator[aiosqlite.Connection, None]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            yield db
+
+    async def setup(self) -> None:
+        """Initialize database tables on application startup."""
+        self._init_db_sync()
 
     # --------------------------------------------------------------------------
     # User Management
