@@ -1,4 +1,0 @@
-# Dependencies for Offline PDF Ingestion (ingestion.py)
-# To be run locally on your host workstation (NOT inside the production Docker container)
--r requirements.txt
-unstructured[pdf]
