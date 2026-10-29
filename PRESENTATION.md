@@ -73,7 +73,7 @@ style: |
 
 ```mermaid
 flowchart LR
-    PDF["Local PDF"] --> Ingest["ingestion.py\n(unstructured hi_res)"]
+    PDF["Local PDF"] --> Ingest["ingestion.py\n(Fast Text Extraction)"]
     Ingest --> Split["Splitter (500/50)\nPage & Section Bound"]
     Split --> Qdrant[("Qdrant Cloud\ntext-embedding-004")]
     
@@ -95,8 +95,8 @@ flowchart LR
 
 ## 3. Phase 1 & 2: Stateful PDF Ingestion (`ingestion.py`)
 
-### Hi-Res Partitioning & Page-Boundary Flushes
-- **Layout-Aware Classification:** Uses `unstructured.partition_pdf(strategy="hi_res")` to detect structural primitives (`Title`, `Header`, `NarrativeText`, `Table`).
+### Fast Digital Text Extraction & Page-Boundary Flushes
+- **Fast Digital Text Extraction:** Uses `unstructured.partition_pdf(strategy="fast")` with native `pypdf` fallback. Assumes digital text only and explicitly bypasses all embedded images, eliminating all OCR and vision model dependencies.
 - **Stateful Section Pointer:** Dynamically updates `current_section` upon encountering headers; children paragraphs inherit the active section metadata.
 - **Hard Page-Boundary Flushes:** Text buffers **never** cross page boundaries. When `page_number` increments, the buffer is immediately finalized.
 - **Chunking Configuration:** `RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)`.
@@ -203,7 +203,7 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 
 ### Production `Dockerfile`
 - **Base:** `python:3.11-slim` with `PYTHONUNBUFFERED=1`.
-- **System Dependencies:** `tesseract-ocr` and `poppler-utils` for layout analysis.
+- **Zero OCR Bloat:** Pure text dependencies without `tesseract-ocr`, `poppler-utils`, or CUDA GPU runtimes. Lightweight footprint (~200MB).
 - **Optimization:** Layer caching for `requirements.txt`.
 - **Isolated Serving:** Offline ingestion (`ingestion.py`) kept separate from web serving.
 

@@ -8,6 +8,8 @@ qdrant-client
 langchain-qdrant
 langchain-groq
 langchain-google-genai
-unstructured[pdf]
+unstructured
+pypdf
+pdfminer.six
 pydantic
 python-dotenv

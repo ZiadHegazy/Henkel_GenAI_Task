@@ -1,52 +1,32 @@
 """
-ingestion.py - Stateful PDF Ingestion & Vector Indexing Pipeline for Production RAG
-===================================================================================
+ingestion.py - Fast Digital PDF Ingestion & Vector Indexing Pipeline
+=====================================================================
 
-Architecture & Design Justification:
--------------------------------------
-1. Strategy & Chunking Rationale (size=500, overlap=50):
-   - In production RAG systems, embedding quality and retrieval precision degrade
-     when chunk sizes are either too large (diluting specific facts and causing the
-     "lost in the middle" phenomenon) or too small (losing syntactic coherence and
-     contextual meaning).
-   - A chunk size of 500 characters (~75-100 words) captures self-contained factual
-     propositions, table entries, and specific policy or technical clauses without
-     overwhelming the embedding model with unrelated topics.
-   - A 50-character sliding overlap (~10% buffer) preserves sentence boundaries and
-     semantic continuity across adjacent chunks, preventing critical keyword splits
-     at arbitrary cutoffs.
+Architecture & Design Justification (Text-Only / Fast Mode):
+------------------------------------------------------------
+1. Zero-OCR & Digital Text Rationale:
+   - This pipeline assumes input documents contain digital text streams.
+   - All image elements, figures, and graphical decorations are explicitly bypassed,
+     eliminating the need for heavyweight OCR engines (Tesseract, Poppler), computer vision
+     frameworks (OpenCV, PyTorch, detectron2), and Hugging Face model downloads.
+   - Uses `unstructured.partition_pdf(strategy="fast")` backed by direct PDF text stream
+     extraction, delivering sub-second parsing with zero GPU/CUDA overhead.
+   - Includes a native `pypdf` fallback to ensure deterministic execution under any environment.
 
 2. Page-Boundary Preservation for 1-to-1 Citation Integrity:
-   - Traditional text splitters ingest an entire document as a single contiguous stream,
-     allowing chunks to span across page breaks. This causes attribution ambiguity,
-     where a generated citation might claim Page 3 for information that actually originated
-     on Page 4.
-   - To guarantee strict, verifiable 1-to-1 page citations required for auditability
-     and compliance, this pipeline enforces hard page-boundary flushing: chunks are
-     never allowed to straddle multiple pages. Every generated vector chunk maps
+   - To guarantee strict, verifiable 1-to-1 page citations required for auditability,
+     buffers are flushed whenever `page_number` transitions.
+   - Chunks never straddle multiple pages, ensuring every generated chunk maps
      deterministically to exactly one source page (`metadata['page']`).
 
 3. Stateful Section Tracking (Hierarchical Provenance):
-   - Documents are structured hierarchically (e.g., Executive Summary, Methodologies,
-     Financial Obligations, Terms of Service).
-   - By parsing document elements with `unstructured` and tracking state transitions
-     on title and header elements, every paragraph and table row inherits its active
-     section context (`metadata['section']`).
-   - When fed into the downstream LLM generation node, this section metadata is prepended
-     into the prompt context, dramatically reducing hallucinations by grounding the
-     model in both physical location (page) and logical structure (section).
+   - Maintains an active section pointer (`current_section`) updated whenever a Title,
+     Header, or Section Heading is encountered.
+   - All text paragraphs inherit their active section context (`metadata['section']`).
 
-4. High-Resolution Document Partitioning:
-   - Using `unstructured.partition_pdf(strategy="hi_res")` provides layout-aware
-     element classification (distinguishing Titles, NarrativeText, Tables, Headers,
-     and Footers) powered by OCR/layout detection, outperforming naive PyPDF/pdfplumber
-     dumps on complex multi-column or scanned layouts.
-
-5. Embeddings & Vector Store:
-   - Embeddings: Google AI Studio `text-embedding-004` (768-dimensional, high semantic
-     fidelity, optimized for retrieval benchmarks).
-   - Vector Index: Cloud-hosted Qdrant with Cosine Distance, providing millisecond-range
-     approximate nearest neighbor (ANN) search with native payload filtering.
+4. Embeddings & Vector Index:
+   - Google AI Studio `text-embedding-004` (768-dimensional normalized vectors).
+   - Qdrant Cloud vector database with Cosine Distance.
 """
 
 from __future__ import annotations
@@ -84,44 +64,81 @@ def get_required_env_var(name: str) -> str:
 
 def parse_pdf_elements(pdf_path: str) -> List[Any]:
     """
-    Parse a local PDF file into structured layout elements using unstructured hi_res strategy.
-
-    Parameters:
-        pdf_path: Path to the target PDF file on disk.
-
-    Returns:
-        List of structured elements (e.g., Title, NarrativeText, ListItem, Table).
+    Parse a local PDF file into structured elements using fast digital text extraction.
+    Assumes PDF contains digital text only; all image elements are explicitly bypassed.
+    Does NOT require OCR, Tesseract, Poppler, or GPU models.
     """
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"Target PDF file not found at: {pdf_path}")
 
-    logger.info("Starting high-resolution PDF partitioning for: %s", pdf_path)
+    logger.info("Starting fast text extraction (no OCR, bypassing images) for: %s", pdf_path)
+
+    # 1. Primary parser: unstructured with strategy='fast'
     try:
         from unstructured.partition.pdf import partition_pdf
-    except ImportError as exc:
-        logger.error("Failed to import 'unstructured'. Ensure 'unstructured[pdf]' is installed.")
-        raise exc
 
-    # Attempt hi-res partitioning first; fall back gracefully to fast strategy if layout model encounters issues
-    try:
-        elements = partition_pdf(
-            filename=pdf_path,
-            strategy="hi_res",
-            infer_table_structure=True,
-            include_page_breaks=True,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Hi-res partitioning encountered an issue (%s). Falling back to strategy='fast'...",
-            exc,
-        )
-        elements = partition_pdf(
+        raw_elements = partition_pdf(
             filename=pdf_path,
             strategy="fast",
             include_page_breaks=True,
         )
-    logger.info("Successfully partitioned PDF into %d raw structural elements.", len(elements))
-    return elements
+
+        # Filter out images, figures, and empty elements
+        filtered_elements = []
+        for el in raw_elements:
+            cat = str(getattr(el, "category", "") or el.__class__.__name__).lower()
+            if cat in ("image", "figure", "picture", "drawing"):
+                continue  # Bypassed per specification
+            filtered_elements.append(el)
+
+        logger.info(
+            "Fast unstructured parsing extracted %d text elements (bypassed image elements).",
+            len(filtered_elements),
+        )
+        return filtered_elements
+
+    except Exception as exc:
+        logger.warning(
+            "Unstructured fast partition encountered an issue (%s). Using native pypdf fallback...",
+            exc,
+        )
+
+    # 2. Resilient Fallback: native pypdf page extraction
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        import pypdf
+        PdfReader = pypdf.PdfReader
+
+    reader = PdfReader(pdf_path)
+    fallback_elements = []
+
+    class MockElement:
+        def __init__(self, text: str, page_number: int, category: str):
+            self.text = text
+            self.category = category
+            self.metadata = type("Meta", (), {"page_number": page_number})()
+
+    for page_idx, page in enumerate(reader.pages, start=1):
+        page_text = page.extract_text() or ""
+        paragraphs = [p.strip() for p in page_text.split("\n\n") if p.strip()]
+
+        for p_idx, para in enumerate(paragraphs):
+            # Simple heuristic: short lines at top or capitalized lines are headers
+            lines = para.split("\n")
+            first_line = lines[0].strip()
+            if (len(first_line) < 80 and (first_line.isupper() or first_line.istitle())) or p_idx == 0:
+                fallback_elements.append(MockElement(text=first_line, page_number=page_idx, category="Title"))
+                remaining_text = "\n".join(lines[1:]).strip()
+                if remaining_text:
+                    fallback_elements.append(
+                        MockElement(text=remaining_text, page_number=page_idx, category="NarrativeText")
+                    )
+            else:
+                fallback_elements.append(MockElement(text=para, page_number=page_idx, category="NarrativeText"))
+
+    logger.info("Native pypdf extraction completed with %d text elements.", len(fallback_elements))
+    return fallback_elements
 
 
 def extract_and_group_elements(
@@ -129,24 +146,13 @@ def extract_and_group_elements(
     default_section: str = "Introduction / Document Header",
 ) -> List[Dict[str, Any]]:
     """
-    Iterate through unstructured elements, maintain stateful section tracking,
+    Iterate through elements, maintain stateful section tracking,
     and group text into buffers strictly respecting page boundaries.
 
-    Chunking Design Guarantee:
+    Guarantees:
+    - Images are ignored.
     - Buffers NEVER span multiple pages.
     - Each buffer maintains the currently active section title.
-    - Header/Title elements update the active `current_section` state.
-
-    Parameters:
-        elements: Raw elements parsed by unstructured.
-        default_section: Fallback section name before the first header is encountered.
-
-    Returns:
-        A list of dictionaries with structure:
-        [
-            {"page": int, "section": str, "text": str},
-            ...
-        ]
     """
     header_categories = {
         "title",
@@ -175,30 +181,28 @@ def extract_and_group_elements(
         category = str(getattr(element, "category", "") or element.__class__.__name__).lower()
         text = str(getattr(element, "text", "") or "").strip()
 
+        # Explicitly bypass any image or graphical elements
+        if category in ("image", "figure", "picture", "drawing") or not text:
+            continue
+
         # Resolve element page number
         meta = getattr(element, "metadata", None)
         elem_page = getattr(meta, "page_number", None) if meta else None
         if elem_page is None:
             elem_page = current_page if current_page is not None else 1
 
-        if not text:
-            continue
-
         # Check if element represents a section header or document title
         if category in header_categories:
-            # Flush existing buffer before section transition
             flush_buffer(current_page, current_section, current_text_buffer)
             current_text_buffer = []
 
             # Update stateful section pointer
             current_section = text
             current_page = elem_page
-            # Include the header text in the new section buffer for semantic context
             current_text_buffer.append(text)
         else:
             # Check if page boundary has changed
             if current_page is not None and elem_page != current_page:
-                # Flush existing buffer to guarantee strict page boundary isolation
                 flush_buffer(current_page, current_section, current_text_buffer)
                 current_text_buffer = []
 
@@ -209,7 +213,7 @@ def extract_and_group_elements(
     flush_buffer(current_page, current_section, current_text_buffer)
 
     logger.info(
-        "Grouped raw elements into %d page-bounded, section-tagged text blocks.",
+        "Grouped text into %d page-bounded, section-tagged blocks (1-to-1 page mapping).",
         len(grouped_blocks),
     )
     return grouped_blocks
@@ -223,14 +227,6 @@ def split_blocks_into_chunks(
     """
     Split page-bounded blocks using RecursiveCharacterTextSplitter and attach
     strict page and section metadata to every resulting chunk.
-
-    Parameters:
-        grouped_blocks: Output from `extract_and_group_elements`.
-        chunk_size: Maximum chunk size in characters (default: 500).
-        chunk_overlap: Sliding overlap between chunks in characters (default: 50).
-
-    Returns:
-        List of LangChain `Document` objects with populated page_content and metadata.
     """
     try:
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -251,10 +247,9 @@ def split_blocks_into_chunks(
             )
         except ImportError:
             logger.warning(
-                "Neither langchain_text_splitters nor langchain.text_splitter found. "
-                "Using built-in robust character splitter."
+                "langchain text splitters not available. Using built-in character splitter."
             )
-            class SimpleRecursiveSplitter:
+            class BuiltinSplitter:
                 def __init__(self, size: int, overlap: int):
                     self.size = size
                     self.overlap = overlap
@@ -270,7 +265,7 @@ def split_blocks_into_chunks(
                             break
                         start += step
                     return res
-            splitter = SimpleRecursiveSplitter(size=chunk_size, overlap=chunk_overlap)
+            splitter = BuiltinSplitter(size=chunk_size, overlap=chunk_overlap)
 
     from langchain_core.documents import Document
 
@@ -312,15 +307,6 @@ def load_chunks_into_qdrant(
     """
     Embed chunks using GoogleGenerativeAIEmbeddings (text-embedding-004) and index
     into Qdrant Cloud.
-
-    Parameters:
-        documents: List of LangChain Document objects.
-        collection_name: Name of target Qdrant collection.
-        recreate_collection: If True, drops and recreates the collection.
-        batch_size: Batch size for embedding and indexing operations.
-
-    Returns:
-        An instantiated QdrantVectorStore connected to the populated collection.
     """
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
     from langchain_qdrant import QdrantVectorStore
@@ -330,7 +316,6 @@ def load_chunks_into_qdrant(
     qdrant_url = get_required_env_var("QDRANT_URL")
     qdrant_api_key = get_required_env_var("QDRANT_API_KEY")
 
-    # Support either GEMINI_API_KEY or GOOGLE_API_KEY
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not gemini_key:
         raise ValueError("Missing GEMINI_API_KEY or GOOGLE_API_KEY for embedding generation.")
@@ -379,7 +364,12 @@ def load_chunks_into_qdrant(
     for i in range(0, total_docs, batch_size):
         batch = documents[i : i + batch_size]
         vector_store.add_documents(documents=batch)
-        logger.info("Indexed chunks %d to %d of %d.", i + 1, min(i + batch_size, total_docs), total_docs)
+        logger.info(
+            "Indexed chunks %d to %d of %d.",
+            i + 1,
+            min(i + batch_size, total_docs),
+            total_docs,
+        )
 
     logger.info("Successfully indexed all %d chunks into Qdrant collection '%s'.", total_docs, collection_name)
     return vector_store
@@ -391,11 +381,11 @@ def run_pipeline(
     recreate_collection: bool = False,
 ) -> None:
     """Execute the end-to-end PDF ingestion pipeline."""
-    logger.info("=== Starting PDF Ingestion Pipeline ===")
+    logger.info("=== Starting PDF Ingestion Pipeline (Text-Only Mode) ===")
     logger.info("File: %s", pdf_path)
     logger.info("Target Collection: %s", collection_name)
 
-    # 1. Parse PDF with hi_res strategy
+    # 1. Parse PDF with fast text-only extraction (bypassing images)
     elements = parse_pdf_elements(pdf_path)
 
     # 2. Stateful section tracking and page-boundary buffer grouping
@@ -419,7 +409,7 @@ def run_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Stateful PDF Ingestion Pipeline with Metadata Tracking for Production RAG"
+        description="Fast Text-Only PDF Ingestion Pipeline for Production RAG (No OCR, Images Bypassed)"
     )
     parser.add_argument(
         "--file",

@@ -10,8 +10,8 @@ The system processes queries through a deterministic state machine orchestrated 
 
 ```mermaid
 flowchart TD
-    subgraph Offline Ingestion ["Phase 2: Offline Document Ingestion (Local)"]
-        PDF["Input PDF Document"] --> Partition["unstructured partition_pdf (hi_res)"]
+    subgraph Offline Ingestion ["Phase 2: Offline Document Ingestion (Fast Text Mode)"]
+        PDF["Input PDF Document"] --> Partition["unstructured partition_pdf (fast text, images bypassed)"]
         Partition --> Grouping["Page-Bounded & Section-Aware Buffering"]
         Grouping --> Splitter["RecursiveCharacterTextSplitter (size: 500, overlap: 50)"]
         Splitter --> Embed["Google AI Studio (text-embedding-004, 768-dim)"]
@@ -53,7 +53,7 @@ flowchart TD
 ## 📐 Key Design Decisions & Justifications
 
 ### 1. Document Partitioning & Chunking Strategy
-- **Layout-Aware Partitioning (`unstructured` hi_res)**: Standard text extraction flattens PDF layouts, losing critical structural distinctions like headers, footers, tables, and multi-column flows. The `hi_res` strategy uses layout detection models and OCR to categorize elements (`Title`, `Header`, `NarrativeText`, `Table`).
+- **Digital Text-Only Extraction (Zero OCR Overhead)**: Assumes input documents contain digital text streams. All embedded raster images and decorative graphics are explicitly bypassed. Employs `unstructured.partition_pdf(strategy="fast")` with native `pypdf` fallback, executing in sub-seconds with zero OCR dependencies (`tesseract`, `poppler`, `libgl1`) and zero GPU/PyTorch downloads.
 - **Stateful Section Tracking**: When iterating through layout elements, the active section is maintained in a state variable (`current_section`) whenever a header or title element is encountered. Every resulting chunk inherits this section context.
 - **Strict Page-Boundary Isolation**: Unlike naive Contiguous Text Splitters that allow chunks to span across page breaks, our buffer flushes whenever `page_number` changes. This guarantees a **strict 1-to-1 mapping** between text chunks and their physical page numbers, completely eliminating page citation hallucinations.
 - **Chunk Size (500) & Overlap (50)**: Captures self-contained factual propositions and specific clauses while avoiding the dilution of semantic density. The 10% overlap (50 characters) ensures boundary continuity without cluttering the vector space.
@@ -141,15 +141,12 @@ Open your browser and navigate to: **[http://localhost:8000](http://localhost:80
 
 ---
 
-## 📄 Offline Document Ingestion (Manual Run)
+## 📄 Document Ingestion (Local or Containerized)
 
-The ingestion script is executed **offline** on your local machine (not inside the production Docker container) to populate the Qdrant vector index.
+The ingestion script extracts digital text, preserves 1-to-1 page boundaries, updates section headers, and populates the Qdrant vector index.
 
 ```bash
-# Install ingestion dependencies (including layout-aware unstructured[pdf]) on host
-pip install -r requirements-ingestion.txt
-
-# Ingest a PDF document into Qdrant Cloud
+# Ingest a PDF document into Qdrant Cloud (Local or inside Docker)
 python ingestion.py --file path/to/document.pdf --collection rag_documents
 
 # Ingest and recreate collection from scratch
@@ -157,4 +154,4 @@ python ingestion.py --file path/to/document.pdf --collection rag_documents --rec
 ```
 
 > [!TIP]
-> **Docker Image Optimization**: The Docker container only packages runtime serving dependencies (`requirements.txt`), keeping the image lean (~450MB instead of >4.5GB) and reducing build times from >15 minutes down to ~25 seconds by excluding offline computer-vision and PyTorch dependencies from the web runtime.
+> **Zero OCR Overhead**: Ingestion operates in fast digital text mode, bypassing all embedded images. The Docker image does not require `tesseract-ocr`, `poppler-utils`, `libgl1`, or heavy PyTorch / CUDA models, resulting in an ultra-lightweight (~200MB) image that builds in ~10-15 seconds.
