@@ -89,6 +89,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     comment TEXT
                 )
             """)
+            conn.execute("UPDATE threads SET userIdentifier = 'default_user', userId = 'default_user'")
             conn.commit()
             logger.info("SQLite Chat Database schema verified synchronously at: %s", self.db_path)
 
@@ -157,8 +158,8 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                 "id": thread_row["id"],
                 "createdAt": thread_row["createdAt"],
                 "name": thread_row["name"] or "Chat Session",
-                "userId": thread_row["userId"],
-                "userIdentifier": thread_row["userIdentifier"],
+                "userId": "default_user",
+                "userIdentifier": "default_user",
                 "tags": json.loads(thread_row["tags"] or "[]"),
                 "metadata": json.loads(thread_row["metadata"] or "{}"),
                 "steps": steps,

@@ -41,6 +41,10 @@ os.environ.setdefault(
     "318aba24fd67476d8fa80e4663f7b1d86ff161f3c5404ba8949db7187bd4def8",
 )
 
+# Disable the "This will clear your current chat history" confirmation dialog on New Chat
+from chainlit.config import config as cl_config
+cl_config.ui.confirm_new_chat = False
+
 # Import LangGraph components, state, and intent predictor
 from graph import (
     CitedAnswer,
