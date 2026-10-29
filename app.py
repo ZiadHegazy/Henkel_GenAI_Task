@@ -35,6 +35,12 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 # Load environment configuration
 load_dotenv()
 
+# Ensure fallback auth secret so sessions sign seamlessly even without external .env configuration
+os.environ.setdefault(
+    "CHAINLIT_AUTH_SECRET",
+    "318aba24fd67476d8fa80e4663f7b1d86ff161f3c5404ba8949db7187bd4def8",
+)
+
 # Import LangGraph components, state, and intent predictor
 from graph import (
     CitedAnswer,
@@ -56,13 +62,23 @@ app_logger = get_json_logger("chainlit_app")
 
 
 # ------------------------------------------------------------------------------
-# 1. Chainlit SQLite Data Layer (Public Access - No Login Required)
+# 1. Chainlit SQLite Data Layer & Silent Public Auth
 # ------------------------------------------------------------------------------
 
 @cl.data_layer
 def get_data_layer():
     """Register SQLite as the persistent storage backend for Chainlit."""
     return sqlite_data_layer
+
+
+@cl.header_auth_callback
+def header_auth_callback(headers: Dict[str, str]) -> Optional[cl.User]:
+    """
+    Automatic silent authentication for public access.
+    Instantly authenticates the browser session as 'default_user' without showing
+    any login screen or password prompt, enabling the left-sidebar Chat History panel.
+    """
+    return cl.User(identifier="default_user", metadata={"role": "user"})
 
 
 # ------------------------------------------------------------------------------

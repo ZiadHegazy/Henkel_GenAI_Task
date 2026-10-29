@@ -176,6 +176,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             cursor = await db.execute("SELECT id FROM threads WHERE id = ?", (thread_id,))
             exists = await cursor.fetchone()
             now = datetime.now(timezone.utc).isoformat()
+            active_user = user_id or "default_user"
 
             if not exists:
                 await db.execute(
@@ -185,8 +186,8 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                         thread_id,
                         now,
                         name or "New Conversation",
-                        user_id or "public",
-                        user_id or "public",
+                        active_user,
+                        active_user,
                         json.dumps(tags or []),
                         json.dumps(metadata or {}),
                     ),
@@ -202,8 +203,8 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                        WHERE id = ?""",
                     (
                         name,
-                        user_id,
-                        user_id,
+                        active_user,
+                        active_user,
                         json.dumps(tags) if tags is not None else None,
                         json.dumps(metadata) if metadata is not None else None,
                         thread_id,
@@ -212,12 +213,8 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def get_thread_author(self, thread_id: str) -> str:
-        async with self._get_db() as db:
-            cursor = await db.execute("SELECT userIdentifier FROM threads WHERE id = ?", (thread_id,))
-            row = await cursor.fetchone()
-            if row and row["userIdentifier"]:
-                return str(row["userIdentifier"])
-        return "public"
+        """Always return active user so thread resumption passes ACL check in public mode."""
+        return "default_user"
 
     async def delete_thread(self, thread_id: str) -> None:
         async with self._get_db() as db:
@@ -230,17 +227,10 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     async def list_threads(
         self, pagination: Pagination, filters: ThreadFilter
     ) -> PaginatedResponse[ThreadDict]:
-        limit = pagination.first or 40
+        limit = pagination.first or 50
         async with self._get_db() as db:
-            query = "SELECT * FROM threads"
-            params: List[Any] = []
-            if filters and filters.userId:
-                query += " WHERE userId = ? OR userIdentifier = ?"
-                params.extend([filters.userId, filters.userId])
-            query += " ORDER BY createdAt DESC LIMIT ?"
-            params.append(limit)
-
-            cursor = await db.execute(query, params)
+            query = "SELECT * FROM threads ORDER BY createdAt DESC LIMIT ?"
+            cursor = await db.execute(query, (limit,))
             rows = await cursor.fetchall()
 
             threads_data: List[ThreadDict] = []
