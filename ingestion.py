@@ -102,13 +102,24 @@ def parse_pdf_elements(pdf_path: str) -> List[Any]:
         logger.error("Failed to import 'unstructured'. Ensure 'unstructured[pdf]' is installed.")
         raise exc
 
-    # Hi-res partitioning with element classification
-    elements = partition_pdf(
-        filename=pdf_path,
-        strategy="hi_res",
-        infer_table_structure=True,
-        include_page_breaks=True,
-    )
+    # Attempt hi-res partitioning first; fall back gracefully to fast strategy if layout model encounters issues
+    try:
+        elements = partition_pdf(
+            filename=pdf_path,
+            strategy="hi_res",
+            infer_table_structure=True,
+            include_page_breaks=True,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Hi-res partitioning encountered an issue (%s). Falling back to strategy='fast'...",
+            exc,
+        )
+        elements = partition_pdf(
+            filename=pdf_path,
+            strategy="fast",
+            include_page_breaks=True,
+        )
     logger.info("Successfully partitioned PDF into %d raw structural elements.", len(elements))
     return elements
 

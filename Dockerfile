@@ -16,15 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Pre-install lightweight CPU-only PyTorch to PREVENT downloading 4+ GB of NVIDIA CUDA / Triton GPU runtimes
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
 # Copy requirements file first for layer caching
 COPY requirements.txt .
 
-# Exclude offline ingestion package (unstructured[pdf]) during container build
-# to prevent downloading 4+ GB of heavy local GPU runtimes (nvidia-cudnn, cuda-toolkit, triton)
-# since the runtime application uses cloud APIs (Groq, Google AI Studio, Qdrant Cloud).
-RUN sed '/unstructured/d' requirements.txt > /tmp/runtime-requirements.txt \
-    && pip install --no-cache-dir --prefer-binary -r /tmp/runtime-requirements.txt \
-    && rm /tmp/runtime-requirements.txt
+# Install dependencies (unstructured[pdf] uses pre-installed CPU PyTorch without GPU/CUDA bloat)
+RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy application source files
 COPY . .
