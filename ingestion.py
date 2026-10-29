@@ -23,9 +23,11 @@ Architecture & Design Justification (Text-Only / Fast Mode):
      or Header element is encountered. Text paragraphs inherit their active section
      context (`metadata['section']`).
 
-4. Embeddings & Vector Index:
-   - Google AI Studio `text-embedding-004` (768-dimensional normalized vectors).
-   - Qdrant Cloud vector database with Cosine Distance.
+4. Resilient Embedding & Dynamic Vector Indexing:
+   - Uses an auto-discovering embedding model factory (`models/gemini-embedding-001`,
+     `models/gemini-embedding-2`, `models/embedding-001`) to handle API deprecations seamlessly.
+   - Dynamically probes the embedding vector dimensionality (e.g. 768, 1536, 3072) and
+     configures the Qdrant Cloud collection schema accordingly.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ import argparse
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
@@ -96,7 +98,6 @@ def parse_pdf_elements(pdf_path: str) -> List[Any]:
                     continue
 
                 first_line = lines[0]
-                # Heuristic header detection: short line, all-caps, title case, or top line of page
                 is_header = (
                     (len(first_line) < 80 and (first_line.isupper() or first_line.istitle()))
                     or (b_idx == 0 and len(first_line) < 100)
@@ -297,6 +298,47 @@ def split_blocks_into_chunks(
     return all_chunks
 
 
+def resolve_embeddings(gemini_key: str) -> Tuple[Any, int]:
+    """
+    Auto-discovers and validates an active Google Gemini embedding model.
+    Falls back gracefully across models/gemini-embedding-001, models/gemini-embedding-2,
+    and models/text-embedding-004 to ensure high reliability.
+    Returns (embeddings_instance, vector_dimension).
+    """
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+    candidates = [
+        os.getenv("EMBEDDING_MODEL"),
+        "models/gemini-embedding-001",
+        "gemini-embedding-001",
+        "models/gemini-embedding-2",
+        "models/embedding-001",
+        "models/text-embedding-004",
+    ]
+    models_to_try = [m for m in candidates if m]
+
+    for model_name in models_to_try:
+        try:
+            logger.info("Testing embedding model: %s ...", model_name)
+            emb = GoogleGenerativeAIEmbeddings(
+                model=model_name,
+                google_api_key=gemini_key,
+            )
+            # Test probe to verify model status and determine vector dimension
+            sample_vector = emb.embed_query("connection probe")
+            vector_dim = len(sample_vector)
+            logger.info(
+                "Successfully validated embedding model '%s' with dimension %d.",
+                model_name,
+                vector_dim,
+            )
+            return emb, vector_dim
+        except Exception as exc:
+            logger.warning("Embedding candidate '%s' failed (%s). Trying next...", model_name, exc)
+
+    raise RuntimeError("Could not initialize any supported Google AI Studio embedding model.")
+
+
 def load_chunks_into_qdrant(
     documents: List[Any],
     collection_name: str = "rag_documents",
@@ -304,10 +346,9 @@ def load_chunks_into_qdrant(
     batch_size: int = 64,
 ) -> Any:
     """
-    Embed chunks using GoogleGenerativeAIEmbeddings (text-embedding-004) and index
-    into Qdrant Cloud.
+    Embed chunks using active Google embedding model and index into Qdrant Cloud.
+    Dynamically sizes the Qdrant collection to match the embedding vector dimension.
     """
-    from langchain_google_genai import GoogleGenerativeAIEmbeddings
     from langchain_qdrant import QdrantVectorStore
     from qdrant_client import QdrantClient
     from qdrant_client.http import models as rest_models
@@ -320,11 +361,8 @@ def load_chunks_into_qdrant(
         raise ValueError("Missing GEMINI_API_KEY or GOOGLE_API_KEY for embedding generation.")
     os.environ["GOOGLE_API_KEY"] = gemini_key
 
-    logger.info("Initializing GoogleGenerativeAIEmbeddings (models/text-embedding-004)...")
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004",
-        google_api_key=gemini_key,
-    )
+    # Dynamically resolve model and dimension
+    embeddings, vector_dimension = resolve_embeddings(gemini_key)
 
     logger.info("Connecting to Qdrant cluster at: %s", qdrant_url)
     client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=60.0)
@@ -340,13 +378,14 @@ def load_chunks_into_qdrant(
 
     if collection_name not in existing_collections:
         logger.info(
-            "Creating Qdrant collection '%s' with 768-dim Cosine distance vectors...",
+            "Creating Qdrant collection '%s' with %d-dim Cosine distance vectors...",
             collection_name,
+            vector_dimension,
         )
         client.create_collection(
             collection_name=collection_name,
             vectors_config=rest_models.VectorParams(
-                size=768,  # text-embedding-004 dimension
+                size=vector_dimension,
                 distance=rest_models.Distance.COSINE,
             ),
         )
@@ -397,7 +436,7 @@ def run_pipeline(
         logger.warning("No chunks were generated from the document. Exiting.")
         return
 
-    # 4. Embed with text-embedding-004 and index into Qdrant
+    # 4. Embed and index into Qdrant
     load_chunks_into_qdrant(
         documents=chunks,
         collection_name=collection_name,

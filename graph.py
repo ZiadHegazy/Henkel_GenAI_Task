@@ -149,10 +149,26 @@ def get_vector_store(collection_name: Optional[str] = None):
     # Ensure GOOGLE_API_KEY is available in the environment
     os.environ["GOOGLE_API_KEY"] = gemini_key
 
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004",
-        google_api_key=gemini_key,
-    )
+    # Auto-resolve active Google embedding model with fallback
+    candidate_models = [
+        os.getenv("EMBEDDING_MODEL"),
+        "models/gemini-embedding-001",
+        "gemini-embedding-001",
+        "models/gemini-embedding-2",
+        "models/embedding-001",
+        "models/text-embedding-004",
+    ]
+    embeddings = None
+    for model_name in [m for m in candidate_models if m]:
+        try:
+            probe_emb = GoogleGenerativeAIEmbeddings(model=model_name, google_api_key=gemini_key)
+            _ = probe_emb.embed_query("probe")
+            embeddings = probe_emb
+            break
+        except Exception:
+            continue
+    if embeddings is None:
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=gemini_key)
 
     client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=30.0)
     target_collection = collection_name or os.getenv("QDRANT_COLLECTION_NAME", "rag_documents")
