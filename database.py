@@ -200,6 +200,14 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                 )
             await db.commit()
 
+    async def get_thread_author(self, thread_id: str) -> str:
+        async with await self._get_db() as db:
+            cursor = await db.execute("SELECT userIdentifier FROM threads WHERE id = ?", (thread_id,))
+            row = await cursor.fetchone()
+            if row and row["userIdentifier"]:
+                return str(row["userIdentifier"])
+        return ""
+
     async def delete_thread(self, thread_id: str) -> None:
         async with await self._get_db() as db:
             await db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
@@ -274,6 +282,9 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.execute("DELETE FROM steps WHERE id = ?", (step_id,))
             await db.commit()
 
+    async def get_favorite_steps(self, user_id: str) -> List[Any]:
+        return []
+
     # --------------------------------------------------------------------------
     # Elements & Feedback
     # --------------------------------------------------------------------------
@@ -311,9 +322,12 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             )
             await db.commit()
 
-    async def delete_element(self, element_id: str) -> None:
+    async def delete_element(self, element_id: str, thread_id: Optional[str] = None) -> None:
         async with await self._get_db() as db:
-            await db.execute("DELETE FROM elements WHERE id = ?", (element_id,))
+            if thread_id:
+                await db.execute("DELETE FROM elements WHERE id = ? AND threadId = ?", (element_id, thread_id))
+            else:
+                await db.execute("DELETE FROM elements WHERE id = ?", (element_id,))
             await db.commit()
 
     async def upsert_feedback(self, feedback: cl_data.Feedback) -> str:
@@ -330,6 +344,9 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
             await db.commit()
         return True
+
+    async def build_debug_url(self) -> str:
+        return ""
 
     async def close(self) -> None:
         pass
