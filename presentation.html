@@ -614,13 +614,13 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 8: Production Observability (JSON Logging & LangSmith) -->
+    <!-- SLIDE 8: Production Observability (JSON Logging & Native UI Tracing) -->
     <!-- ===================================================================== -->
     <div class="slide flex-col space-y-6 w-full" data-title="8. Telemetry & Observability">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Enterprise Telemetry</span>
-          <h2 class="text-2xl font-bold text-white mt-1">Production Observability: JSON Logs & LangSmith</h2>
+          <h2 class="text-2xl font-bold text-white mt-1">Production Observability: JSON Logs & Native UI Tracing</h2>
         </div>
         <span class="badge-emerald px-3 py-1 rounded-full text-xs font-mono">logger.py</span>
       </div>
@@ -650,40 +650,44 @@
 }</pre>
           </div>
           <p class="text-xs text-slate-400">
-            Enables automated alerting, latency percentile tracking ($P_{50}, P_{95}, P_{99}$), and vector similarity distribution monitoring.
+            Enables automated alerting, latency percentile tracking ($P_{50}, P_{95}, P_{99}$), and vector similarity distribution monitoring without external SaaS platforms.
           </p>
         </div>
 
-        <!-- LangSmith Integration -->
+        <!-- Native UI Tracing -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-bold text-slate-200">LangSmith Full Graph Tracing</h3>
-              <span class="badge-purple px-2 py-0.5 rounded text-[11px] font-mono">rag-assessment</span>
+              <h3 class="text-sm font-bold text-slate-200">Native UI Step Tracing (`cl.Step`)</h3>
+              <span class="badge-purple px-2 py-0.5 rounded text-[11px] font-mono">Real-Time UI</span>
             </div>
             <p class="text-xs text-slate-300 leading-relaxed mb-3">
-              Every invocation of the LangGraph state machine streams complete traces to the LangSmith observability platform.
+              Full execution path is traced and displayed interactively directly inside the Chainlit chat feed with zero external dependencies.
             </p>
             <ul class="space-y-2 text-xs text-slate-400">
               <li class="flex items-center gap-2">
                 <span class="text-purple-400">●</span>
-                <span>Visual node-by-node execution graphs and input/output payloads.</span>
+                <span><strong>Intent Prediction:</strong> Real-time classification of conversational vs. document queries.</span>
               </li>
               <li class="flex items-center gap-2">
                 <span class="text-purple-400">●</span>
-                <span>Exact token usage and cost accounting across Groq and Gemini.</span>
+                <span><strong>Retrieval Metrics:</strong> Chunk counts, latency, and full cosine similarity array.</span>
               </li>
               <li class="flex items-center gap-2">
                 <span class="text-purple-400">●</span>
-                <span>Historical regression testing and automated evaluation benchmarks.</span>
+                <span><strong>Quality Gating:</strong> Evaluation against the 0.72 similarity threshold.</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-purple-400">●</span>
+                <span><strong>Multi-Turn Memory:</strong> Seamless context persistence in SQLite (<code class="text-purple-300">chat_history.db</code>).</span>
               </li>
             </ul>
           </div>
 
           <div class="p-3 bg-purple-950/30 rounded-xl border border-purple-800/40 text-xs">
-            <span class="text-purple-300 font-semibold">Project Trace Dashboard:</span>
+            <span class="text-purple-300 font-semibold">100% Self-Contained:</span>
             <div class="mt-1 font-mono text-[11px] text-slate-300 truncate">
-              https://smith.langchain.com/o/default/projects/p/rag-assessment
+              Zero external tracing vendors • Native expandable cards in chat
             </div>
           </div>
         </div>

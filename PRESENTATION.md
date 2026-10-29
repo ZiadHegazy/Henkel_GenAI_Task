@@ -184,9 +184,9 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 }
 ```
 
-### LangSmith Tracing Integration
-- End-to-end trace visualization, token consumption, and node latency profiling.
-- Trace URL: `https://smith.langchain.com/o/default/projects/p/rag-assessment`
+### Self-Contained Local Telemetry
+- Completely self-contained telemetry requiring zero third-party SaaS platforms or external cloud tracing services.
+- Real-time execution tracing rendered directly within the user interface using native Chainlit `cl.Step`.
 
 ---
 

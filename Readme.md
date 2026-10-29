@@ -105,17 +105,24 @@ class CitedAnswer(BaseModel):
 
 ---
 
-## 🔍 LangSmith Tracing & Observability
+## 🔍 Native UI Step Tracing & Observability
 
-To inspect full end-to-end execution traces, token breakdowns, and step latencies in LangSmith:
-1. Ensure your `.env` contains:
-   ```bash
-   LANGCHAIN_TRACING_V2=true
-   LANGCHAIN_API_KEY=your_langchain_api_key_here
-   LANGCHAIN_PROJECT=rag-assessment
-   ```
-2. View live and historic traces directly on the LangSmith dashboard:
-   - **Trace URL**: [https://smith.langchain.com/o/default/projects/p/rag-assessment](https://smith.langchain.com/o/default/projects/p/rag-assessment)
+All execution traces and routing decisions are displayed directly inside the **Chainlit UI** in real time:
+
+### Where to Find Tracing in the UI:
+1. **Interactive Step Cards in the Chat Feed**:
+   - Right above each assistant response, expandable `cl.Step` cards trace every phase of the pipeline:
+     - **`Intent Prediction`**: Displays the detected user intent (`greeting` vs. `document_query`) and chosen branch.
+     - **`Retrieving documents`**: Displays the number of candidate chunks fetched from Qdrant Cloud, individual cosine similarity scores, and the maximum score.
+     - **`Evaluating similarity`**: Displays the semantic quality gating decision (verifying if $\max(\text{score}) \ge 0.72$).
+     - **`Synthesizing answer with citations`**: Displays LLM execution details (context chunk count, multi-turn context turns, primary Groq / fallback Gemini provider).
+   - **How to inspect**: Click directly on any step card in the chat to expand and inspect its input payloads, outputs, and execution metrics.
+
+2. **Inline Provenance Element**:
+   - At the bottom of verified answers, click the **`Source Citations & Provenance`** inline card to view strict 1-to-1 page numbers, section headers, retrieval cosine score, and context counts.
+
+3. **Structured JSON Logs**:
+   - Full latency profiling and retrieval events are emitted as single-line JSON records to `stdout` for container log collectors.
 
 ---
 
@@ -142,9 +149,6 @@ Ensure the following variables are configured in `.env`:
 - `EMBEDDING_MODEL`: `models/gemini-embedding-001` (3072-dim active Google AI Studio model)
 - `CHAINLIT_AUTH_SECRET`: Random 32+ character hex string for signing session JWTs
 - `CHAT_DB_PATH`: Path to SQLite database file (defaults to `chat_history.db`)
-- `LANGCHAIN_TRACING_V2`: `true` or `false`
-- `LANGCHAIN_API_KEY`: LangSmith API key (if tracing enabled)
-- `LANGCHAIN_PROJECT`: `rag-assessment`
 
 ### Step 3: Build the Docker Image
 ```bash
