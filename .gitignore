@@ -31,3 +31,8 @@ Thumbs.db
 # Testing & logs
 .pytest_cache/
 *.log
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3

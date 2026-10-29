@@ -56,24 +56,13 @@ app_logger = get_json_logger("chainlit_app")
 
 
 # ------------------------------------------------------------------------------
-# 1. Chainlit SQLite Data Layer & Authentication
+# 1. Chainlit SQLite Data Layer (Public Access - No Login Required)
 # ------------------------------------------------------------------------------
 
 @cl.data_layer
 def get_data_layer():
     """Register SQLite as the persistent storage backend for Chainlit."""
     return sqlite_data_layer
-
-
-@cl.password_auth_callback
-def auth_callback(username: str, password: str) -> Optional[cl.User]:
-    """
-    Authenticate user to enable persistent thread history in the sidebar.
-    Accepts 'admin'/'admin' or any non-empty credentials for streamlined local access.
-    """
-    if username and password:
-        return cl.User(identifier=username, metadata={"role": "user"})
-    return None
 
 
 # ------------------------------------------------------------------------------

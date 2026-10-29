@@ -4,8 +4,8 @@ database.py - SQLite Async Persistence Layer for Chainlit Multi-Session History
 
 Provides production SQLite persistence for Chainlit chat sessions using `aiosqlite`:
 - Stores users, threads, steps (messages/tools), elements, and feedback.
-- Enables the Chainlit left-sidebar Chat History with multi-session switching.
-- Allows resuming prior threads with state restored into in-memory multi-turn context.
+- Uses asynccontextmanager connection pooling to prevent double-await thread errors.
+- Enables persistent thread storage and message logging.
 """
 
 from __future__ import annotations
@@ -14,8 +14,9 @@ import json
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import aiosqlite
 import chainlit as cl
@@ -36,14 +37,15 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
 
-    async def _get_db(self) -> aiosqlite.Connection:
-        db = await aiosqlite.connect(self.db_path)
-        db.row_factory = aiosqlite.Row
-        return db
+    @asynccontextmanager
+    async def _get_db(self) -> AsyncGenerator[aiosqlite.Connection, None]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            yield db
 
     async def setup(self) -> None:
         """Initialize database tables on application startup."""
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     identifier TEXT PRIMARY KEY,
@@ -98,7 +100,9 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     # User Management
     # --------------------------------------------------------------------------
     async def get_user(self, identifier: str) -> Optional[cl.PersistedUser]:
-        async with await self._get_db() as db:
+        if not identifier:
+            return None
+        async with self._get_db() as db:
             cursor = await db.execute("SELECT * FROM users WHERE identifier = ?", (identifier,))
             row = await cursor.fetchone()
             if row:
@@ -111,16 +115,17 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return None
 
     async def create_user(self, user: cl.User) -> cl.PersistedUser:
+        identifier = user.identifier or "anonymous"
         now = datetime.now(timezone.utc).isoformat()
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute(
                 "INSERT OR REPLACE INTO users (identifier, createdAt, metadata) VALUES (?, ?, ?)",
-                (user.identifier, now, json.dumps(user.metadata or {})),
+                (identifier, now, json.dumps(user.metadata or {})),
             )
             await db.commit()
         return cl.PersistedUser(
-            id=user.identifier,
-            identifier=user.identifier,
+            id=identifier,
+            identifier=identifier,
             createdAt=now,
             metadata=user.metadata or {},
         )
@@ -129,7 +134,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     # Thread (Conversation Session) Management
     # --------------------------------------------------------------------------
     async def get_thread(self, thread_id: str) -> Optional[ThreadDict]:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             cursor = await db.execute("SELECT * FROM threads WHERE id = ?", (thread_id,))
             thread_row = await cursor.fetchone()
             if not thread_row:
@@ -161,7 +166,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         metadata: Optional[Dict] = None,
         tags: Optional[List[str]] = None,
     ) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             cursor = await db.execute("SELECT id FROM threads WHERE id = ?", (thread_id,))
             exists = await cursor.fetchone()
             now = datetime.now(timezone.utc).isoformat()
@@ -174,8 +179,8 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                         thread_id,
                         now,
                         name or "New Conversation",
-                        user_id or "default",
-                        user_id or "default",
+                        user_id or "public",
+                        user_id or "public",
                         json.dumps(tags or []),
                         json.dumps(metadata or {}),
                     ),
@@ -201,15 +206,15 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def get_thread_author(self, thread_id: str) -> str:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             cursor = await db.execute("SELECT userIdentifier FROM threads WHERE id = ?", (thread_id,))
             row = await cursor.fetchone()
             if row and row["userIdentifier"]:
                 return str(row["userIdentifier"])
-        return ""
+        return "public"
 
     async def delete_thread(self, thread_id: str) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
             await db.execute("DELETE FROM steps WHERE threadId = ?", (thread_id,))
             await db.execute("DELETE FROM feedback WHERE threadId = ?", (thread_id,))
@@ -220,7 +225,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         self, pagination: Pagination, filters: ThreadFilter
     ) -> PaginatedResponse[ThreadDict]:
         limit = pagination.first or 40
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             query = "SELECT * FROM threads"
             params: List[Any] = []
             if filters and filters.userId:
@@ -257,7 +262,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     # Step & Message Tracking
     # --------------------------------------------------------------------------
     async def create_step(self, step_dict: dict) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             created_at = step_dict.get("createdAt") or datetime.now(timezone.utc).isoformat()
             await db.execute(
                 """INSERT OR REPLACE INTO steps (id, threadId, name, type, subtype, payload, createdAt)
@@ -278,7 +283,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         await self.create_step(step_dict)
 
     async def delete_step(self, step_id: str) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute("DELETE FROM steps WHERE id = ?", (step_id,))
             await db.commit()
 
@@ -289,7 +294,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     # Elements & Feedback
     # --------------------------------------------------------------------------
     async def get_element(self, thread_id: str, element_id: str) -> Optional[dict]:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             cursor = await db.execute(
                 "SELECT * FROM elements WHERE threadId = ? AND id = ?",
                 (thread_id, element_id),
@@ -307,7 +312,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return None
 
     async def create_element(self, element: cl.Element) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute(
                 """INSERT OR REPLACE INTO elements (id, threadId, type, name, url, chainlitKey)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -323,7 +328,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def delete_element(self, element_id: str, thread_id: Optional[str] = None) -> None:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             if thread_id:
                 await db.execute("DELETE FROM elements WHERE id = ? AND threadId = ?", (element_id, thread_id))
             else:
@@ -331,7 +336,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def upsert_feedback(self, feedback: cl_data.Feedback) -> str:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute(
                 "INSERT OR REPLACE INTO feedback (id, threadId, value, comment) VALUES (?, ?, ?, ?)",
                 (feedback.id, feedback.threadId, feedback.value, feedback.comment),
@@ -340,7 +345,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return feedback.id
 
     async def delete_feedback(self, feedback_id: str) -> bool:
-        async with await self._get_db() as db:
+        async with self._get_db() as db:
             await db.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
             await db.commit()
         return True

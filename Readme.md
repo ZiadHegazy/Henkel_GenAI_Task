@@ -160,7 +160,7 @@ docker build -t chatbot:1.0 .
 docker run -p 8000:8000 --env-file .env -v ${PWD}:/app chatbot:1.0
 ```
 Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**  
-Log in with username `admin` and password `admin` (or any custom username/password). Your chat threads will automatically persist to `chat_history.db` and display in the left sidebar for instant multi-session continuation.
+Access is completely public (no login required). Your conversation threads and step telemetry automatically persist to `chat_history.db`.
 
 ---
 
