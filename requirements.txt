@@ -1,6 +1,5 @@
 langchain
 langchain-core
-langchain-community
 langchain-text-splitters
 langgraph
 chainlit
@@ -8,8 +7,6 @@ qdrant-client
 langchain-qdrant
 langchain-groq
 langchain-google-genai
-unstructured
 pypdf
-pdfminer.six
 pydantic
 python-dotenv

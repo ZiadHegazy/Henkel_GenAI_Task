@@ -12,8 +12,8 @@ WORKDIR /app
 # Copy requirements file first for layer caching
 COPY requirements.txt .
 
-# Install lightweight pure text-based dependencies (No OCR, No GPU/CUDA runtimes)
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+# Install lightweight dependencies utilizing pip caching and binary wheels
+RUN pip install --prefer-binary --timeout 120 --retries 5 -r requirements.txt
 
 # Copy application source files
 COPY . .

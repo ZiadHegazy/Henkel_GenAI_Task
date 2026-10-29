@@ -5,24 +5,23 @@ ingestion.py - Fast Digital PDF Ingestion & Vector Indexing Pipeline
 Architecture & Design Justification (Text-Only / Fast Mode):
 ------------------------------------------------------------
 1. Zero-OCR & Digital Text Rationale:
-   - This pipeline assumes input documents contain digital text streams.
-   - All image elements, figures, and graphical decorations are explicitly bypassed,
-     eliminating the need for heavyweight OCR engines (Tesseract, Poppler), computer vision
-     frameworks (OpenCV, PyTorch, detectron2), and Hugging Face model downloads.
-   - Uses `unstructured.partition_pdf(strategy="fast")` backed by direct PDF text stream
-     extraction, delivering sub-second parsing with zero GPU/CUDA overhead.
-   - Includes a native `pypdf` fallback to ensure deterministic execution under any environment.
+   - Assumes input documents contain digital text streams. All embedded raster
+     images and graphical decorations are bypassed.
+   - Uses `pypdf` as the primary lightweight extractor (~300 KB package size),
+     completely eliminating dependencies on heavy NLP/ML frameworks (spaCy, nltk,
+     pandas, scipy, torch, OpenCV).
+   - Delivers sub-second extraction with zero GPU/CUDA requirements and zero external
+     model downloads.
 
 2. Page-Boundary Preservation for 1-to-1 Citation Integrity:
-   - To guarantee strict, verifiable 1-to-1 page citations required for auditability,
-     buffers are flushed whenever `page_number` transitions.
-   - Chunks never straddle multiple pages, ensuring every generated chunk maps
-     deterministically to exactly one source page (`metadata['page']`).
+   - Buffers are flushed whenever `page_number` transitions. Chunks never straddle
+     multiple pages, ensuring every generated chunk maps deterministically to exactly
+     one source page (`metadata['page']`).
 
 3. Stateful Section Tracking (Hierarchical Provenance):
-   - Maintains an active section pointer (`current_section`) updated whenever a Title,
-     Header, or Section Heading is encountered.
-   - All text paragraphs inherit their active section context (`metadata['section']`).
+   - Maintains an active section pointer (`current_section`) updated whenever a Title
+     or Header element is encountered. Text paragraphs inherit their active section
+     context (`metadata['section']`).
 
 4. Embeddings & Vector Index:
    - Google AI Studio `text-embedding-004` (768-dimensional normalized vectors).
@@ -65,15 +64,64 @@ def get_required_env_var(name: str) -> str:
 def parse_pdf_elements(pdf_path: str) -> List[Any]:
     """
     Parse a local PDF file into structured elements using fast digital text extraction.
-    Assumes PDF contains digital text only; all image elements are explicitly bypassed.
-    Does NOT require OCR, Tesseract, Poppler, or GPU models.
+    Uses pypdf as primary extractor (0.3 MB footprint, zero spacy/torch dependencies).
     """
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"Target PDF file not found at: {pdf_path}")
 
-    logger.info("Starting fast text extraction (no OCR, bypassing images) for: %s", pdf_path)
+    logger.info("Extracting digital text (no OCR, images bypassed) for: %s", pdf_path)
 
-    # 1. Primary parser: unstructured with strategy='fast'
+    class TextElement:
+        def __init__(self, text: str, page_number: int, category: str):
+            self.text = text
+            self.category = category
+            self.metadata = type("Meta", (), {"page_number": page_number})()
+
+    elements: List[TextElement] = []
+
+    # 1. Primary extractor: pypdf (lightweight, zero bloat)
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(pdf_path)
+        logger.info("Reading %d pages with pypdf...", len(reader.pages))
+
+        for page_idx, page in enumerate(reader.pages, start=1):
+            page_text = page.extract_text() or ""
+            raw_blocks = [b.strip() for b in page_text.split("\n\n") if b.strip()]
+
+            for b_idx, block in enumerate(raw_blocks):
+                lines = [line.strip() for line in block.split("\n") if line.strip()]
+                if not lines:
+                    continue
+
+                first_line = lines[0]
+                # Heuristic header detection: short line, all-caps, title case, or top line of page
+                is_header = (
+                    (len(first_line) < 80 and (first_line.isupper() or first_line.istitle()))
+                    or (b_idx == 0 and len(first_line) < 100)
+                )
+
+                if is_header:
+                    elements.append(TextElement(text=first_line, page_number=page_idx, category="Title"))
+                    body = " ".join(lines[1:]).strip()
+                    if body:
+                        elements.append(TextElement(text=body, page_number=page_idx, category="NarrativeText"))
+                else:
+                    body = " ".join(lines).strip()
+                    elements.append(TextElement(text=body, page_number=page_idx, category="NarrativeText"))
+
+        logger.info(
+            "Successfully extracted %d structural text elements across %d pages.",
+            len(elements),
+            len(reader.pages),
+        )
+        return elements
+
+    except ImportError:
+        logger.warning("pypdf not found. Attempting unstructured fallback...")
+
+    # 2. Fallback extractor: unstructured if installed
     try:
         from unstructured.partition.pdf import partition_pdf
 
@@ -83,62 +131,18 @@ def parse_pdf_elements(pdf_path: str) -> List[Any]:
             include_page_breaks=True,
         )
 
-        # Filter out images, figures, and empty elements
-        filtered_elements = []
+        filtered = []
         for el in raw_elements:
             cat = str(getattr(el, "category", "") or el.__class__.__name__).lower()
             if cat in ("image", "figure", "picture", "drawing"):
-                continue  # Bypassed per specification
-            filtered_elements.append(el)
+                continue
+            filtered.append(el)
 
-        logger.info(
-            "Fast unstructured parsing extracted %d text elements (bypassed image elements).",
-            len(filtered_elements),
-        )
-        return filtered_elements
-
+        logger.info("Extracted %d elements via unstructured.", len(filtered))
+        return filtered
     except Exception as exc:
-        logger.warning(
-            "Unstructured fast partition encountered an issue (%s). Using native pypdf fallback...",
-            exc,
-        )
-
-    # 2. Resilient Fallback: native pypdf page extraction
-    try:
-        from pypdf import PdfReader
-    except ImportError:
-        import pypdf
-        PdfReader = pypdf.PdfReader
-
-    reader = PdfReader(pdf_path)
-    fallback_elements = []
-
-    class MockElement:
-        def __init__(self, text: str, page_number: int, category: str):
-            self.text = text
-            self.category = category
-            self.metadata = type("Meta", (), {"page_number": page_number})()
-
-    for page_idx, page in enumerate(reader.pages, start=1):
-        page_text = page.extract_text() or ""
-        paragraphs = [p.strip() for p in page_text.split("\n\n") if p.strip()]
-
-        for p_idx, para in enumerate(paragraphs):
-            # Simple heuristic: short lines at top or capitalized lines are headers
-            lines = para.split("\n")
-            first_line = lines[0].strip()
-            if (len(first_line) < 80 and (first_line.isupper() or first_line.istitle())) or p_idx == 0:
-                fallback_elements.append(MockElement(text=first_line, page_number=page_idx, category="Title"))
-                remaining_text = "\n".join(lines[1:]).strip()
-                if remaining_text:
-                    fallback_elements.append(
-                        MockElement(text=remaining_text, page_number=page_idx, category="NarrativeText")
-                    )
-            else:
-                fallback_elements.append(MockElement(text=para, page_number=page_idx, category="NarrativeText"))
-
-    logger.info("Native pypdf extraction completed with %d text elements.", len(fallback_elements))
-    return fallback_elements
+        logger.error("Failed to parse PDF with both pypdf and unstructured: %s", exc)
+        raise exc
 
 
 def extract_and_group_elements(
@@ -148,11 +152,6 @@ def extract_and_group_elements(
     """
     Iterate through elements, maintain stateful section tracking,
     and group text into buffers strictly respecting page boundaries.
-
-    Guarantees:
-    - Images are ignored.
-    - Buffers NEVER span multiple pages.
-    - Each buffer maintains the currently active section title.
     """
     header_categories = {
         "title",
@@ -381,7 +380,7 @@ def run_pipeline(
     recreate_collection: bool = False,
 ) -> None:
     """Execute the end-to-end PDF ingestion pipeline."""
-    logger.info("=== Starting PDF Ingestion Pipeline (Text-Only Mode) ===")
+    logger.info("=== Starting PDF Ingestion Pipeline (Lightweight Text Mode) ===")
     logger.info("File: %s", pdf_path)
     logger.info("Target Collection: %s", collection_name)
 
@@ -409,7 +408,7 @@ def run_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Fast Text-Only PDF Ingestion Pipeline for Production RAG (No OCR, Images Bypassed)"
+        description="Fast Lightweight PDF Ingestion Pipeline (Zero OCR, Images Bypassed)"
     )
     parser.add_argument(
         "--file",
