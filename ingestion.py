@@ -36,6 +36,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -343,11 +344,12 @@ def load_chunks_into_qdrant(
     documents: List[Any],
     collection_name: str = "rag_documents",
     recreate_collection: bool = False,
-    batch_size: int = 64,
+    batch_size: int = 32,
 ) -> Any:
     """
     Embed chunks using active Google embedding model and index into Qdrant Cloud.
     Dynamically sizes the Qdrant collection to match the embedding vector dimension.
+    Includes automated exponential backoff and rate-limit recovery for Free Tier quotas (HTTP 429).
     """
     from langchain_qdrant import QdrantVectorStore
     from qdrant_client import QdrantClient
@@ -397,17 +399,42 @@ def load_chunks_into_qdrant(
     )
 
     total_docs = len(documents)
-    logger.info("Uploading %d chunks to Qdrant collection '%s'...", total_docs, collection_name)
+    logger.info("Uploading %d chunks to Qdrant collection '%s' in batches of %d...", total_docs, collection_name, batch_size)
 
     for i in range(0, total_docs, batch_size):
         batch = documents[i : i + batch_size]
-        vector_store.add_documents(documents=batch)
-        logger.info(
-            "Indexed chunks %d to %d of %d.",
-            i + 1,
-            min(i + batch_size, total_docs),
-            total_docs,
-        )
+        max_retries = 6
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                vector_store.add_documents(documents=batch)
+                logger.info(
+                    "Indexed chunks %d to %d of %d.",
+                    i + 1,
+                    min(i + batch_size, total_docs),
+                    total_docs,
+                )
+                # Polite pacing to respect Free Tier RPM limits
+                time.sleep(2)
+                break
+            except Exception as exc:
+                err_msg = str(exc)
+                is_rate_limit = any(indicator in err_msg for indicator in ("429", "RESOURCE_EXHAUSTED", "Quota", "rate_limit"))
+
+                if is_rate_limit and attempt < max_retries:
+                    wait_seconds = 45 if ("retry in 45" in err_msg or "45s" in err_msg) else min(60, 15 * attempt)
+                    logger.warning(
+                        "Google API Free Tier Rate Limit (429) encountered on batch %d-%d. Pausing %d seconds for quota window to reset (attempt %d/%d)...",
+                        i + 1,
+                        min(i + batch_size, total_docs),
+                        wait_seconds,
+                        attempt,
+                        max_retries,
+                    )
+                    time.sleep(wait_seconds)
+                else:
+                    logger.error("Fatal exception during batch indexing: %s", exc)
+                    raise exc
 
     logger.info("Successfully indexed all %d chunks into Qdrant collection '%s'.", total_docs, collection_name)
     return vector_store
