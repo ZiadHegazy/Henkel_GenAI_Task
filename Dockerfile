@@ -19,16 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-install lightweight CPU-only PyTorch to PREVENT downloading 4+ GB of NVIDIA CUDA / Triton GPU runtimes
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN pip install  torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Pre-install headless OpenCV so cv2 runs in server environments without desktop OpenGL display
-RUN pip install --no-cache-dir opencv-python-headless
+RUN pip install  opencv-python-headless
 
 # Copy requirements file first for layer caching
 COPY requirements.txt .
 
 # Install dependencies (unstructured[pdf] uses pre-installed CPU PyTorch without GPU/CUDA bloat)
-RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+RUN pip install  --prefer-binary -r requirements.txt
 
 # Copy application source files
 COPY . .
