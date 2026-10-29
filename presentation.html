@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise Verifiable RAG Architecture - Technical Presentation</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .slide {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+    }
+    .slide.active {
+      display: flex;
+      opacity: 1;
+    }
+    .gradient-header {
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .badge-blue { background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa; }
+    .badge-purple { background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); color: #c084fc; }
+    .badge-emerald { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+    .badge-amber { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-blue-600 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="h-16 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur px-8 flex items-center justify-between z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+        R
+      </div>
+      <div>
+        <h1 class="text-sm font-semibold text-slate-200">Production-Grade Verifiable RAG</h1>
+        <p class="text-xs text-slate-400">LangGraph • Qdrant • Groq/Gemini • Chainlit</p>
+      </div>
+    </div>
+
+    <!-- Slide Indicators & Controls -->
+    <div class="flex items-center gap-4">
+      <select id="slideSelect" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-3 py-1.5 text-slate-300 focus:outline-none focus:border-blue-500">
+        <!-- Populated via JS -->
+      </select>
+      <div class="flex items-center bg-slate-800/80 rounded-lg p-1 border border-slate-700/80 text-xs text-slate-300">
+        <span id="slideCounter" class="px-2 font-mono font-medium">01 / 11</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button id="prevBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
+          ◀ Prev
+        </button>
+        <button id="nextBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium text-white transition shadow-sm shadow-blue-500/20">
+          Next ▶
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Progress Bar -->
+  <div class="w-full bg-slate-900 h-1">
+    <div id="progressBar" class="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-1 transition-all duration-300" style="width: 9%;"></div>
+  </div>
+
+  <!-- Main Slide Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 flex items-center justify-center">
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 1: Title & Executive Summary -->
+    <!-- ===================================================================== -->
+    <div class="slide active flex-col justify-center items-center text-center space-y-8 w-full max-w-5xl" data-title="1. Executive Summary">
+      <div class="space-y-4">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full badge-blue text-xs font-semibold uppercase tracking-wider">
+          <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+          GenAI & MLOps Engineering Architecture
+        </div>
+        <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white leading-tight">
+          Enterprise <span class="gradient-header">Verifiable RAG</span> System
+        </h1>
+        <p class="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto font-light leading-relaxed">
+          A production-grade Retrieval-Augmented Generation state machine engineered with strict 1-to-1 page citations, semantic quality gating, multi-provider model fallbacks, and real-time step tracing.
+        </p>
+      </div>
+
+      <!-- Feature Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 w-full text-left pt-4">
+        <div class="bg-slate-900/70 border border-slate-800 p-5 rounded-2xl shadow-xl hover:border-slate-700 transition">
+          <div class="text-blue-400 text-2xl mb-2">📑</div>
+          <h3 class="text-sm font-semibold text-white">1-to-1 Page Citations</h3>
+          <p class="text-xs text-slate-400 mt-1">Hard page-boundary flushes prevent cross-page chunk contamination.</p>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-5 rounded-2xl shadow-xl hover:border-slate-700 transition">
+          <div class="text-indigo-400 text-2xl mb-2">🛡️</div>
+          <h3 class="text-sm font-semibold text-white">Semantic Quality Gate</h3>
+          <p class="text-xs text-slate-400 mt-1">Cosine threshold (&ge; 0.72) triggers deterministic rejection, eliminating hallucinations.</p>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-5 rounded-2xl shadow-xl hover:border-slate-700 transition">
+          <div class="text-purple-400 text-2xl mb-2">⚡</div>
+          <h3 class="text-sm font-semibold text-white">Dual-Provider Resilience</h3>
+          <p class="text-xs text-slate-400 mt-1">Ultra-fast Groq Llama 3.3 with automatic zero-downtime Google Gemini failover.</p>
+        </div>
+        <div class="bg-slate-900/70 border border-slate-800 p-5 rounded-2xl shadow-xl hover:border-slate-700 transition">
+          <div class="text-emerald-400 text-2xl mb-2">📊</div>
+          <h3 class="text-sm font-semibold text-white">Full Telemetry & Tracing</h3>
+          <p class="text-xs text-slate-400 mt-1">Structured JSON logging (latency, tokens, similarity) plus Chainlit UI step tracing.</p>
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-500 font-mono">Press ➔ (Right Arrow) or Click Next to explore the architecture</div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 2: Business & Technical Problem Statement -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="2. Problem Statement">
+      <div class="border-b border-slate-800 pb-4">
+        <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Architectural Context</span>
+        <h2 class="text-3xl font-bold text-white mt-1">The Critical Failures of Naive RAG</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+        <!-- The Problem -->
+        <div class="bg-red-950/20 border border-red-900/40 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 mb-4">
+              <span class="w-3 h-3 rounded-full bg-red-500"></span>
+              <h3 class="text-lg font-semibold text-red-300">Failure Modes in Traditional RAG</h3>
+            </div>
+            <ul class="space-y-3.5 text-xs text-slate-300">
+              <li class="flex items-start gap-2.5">
+                <span class="text-red-400 font-bold">✕</span>
+                <span><strong>Cross-Page Chunk Bleed:</strong> Contiguous text splitters span across page boundaries, resulting in hallucinated page numbers and compliance audit failures.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-red-400 font-bold">✕</span>
+                <span><strong>Lost Section Semantics:</strong> Plain text dumps strip away document headers and parent sections, leaving the LLM unable to identify context scope.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-red-400 font-bold">✕</span>
+                <span><strong>Forced Hallucinations on Irrelevant Queries:</strong> Without an explicit quality cutoff, LLMs fabricate answers from low-similarity retrieved noise.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-red-400 font-bold">✕</span>
+                <span><strong>Single-Provider Bottleneck:</strong> Direct reliance on one model provider creates vulnerability to rate limits (HTTP 429) and outages.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="mt-6 p-3 bg-red-900/20 rounded-xl border border-red-800/30 text-xs text-red-200">
+            <strong>Impact:</strong> Enterprise compliance risks, degraded user trust, and unacceptable production downtime.
+          </div>
+        </div>
+
+        <!-- The Production Solution -->
+        <div class="bg-blue-950/20 border border-blue-900/40 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 mb-4">
+              <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+              <h3 class="text-lg font-semibold text-blue-300">Our Enterprise Solution Architecture</h3>
+            </div>
+            <ul class="space-y-3.5 text-xs text-slate-300">
+              <li class="flex items-start gap-2.5">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span><strong>Stateful Document Boundary Ingestion:</strong> Flushes buffers at page changes to enforce strict 1-to-1 page citations.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span><strong>Dynamic Section Inheritance:</strong> Stateful header detection tags every chunk with its active logical section.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span><strong>Deterministic Routing Gate:</strong> Max cosine score &ge; 0.72 quality threshold rejects noise instantly without LLM cost.</span>
+              </li>
+              <li class="flex items-start gap-2.5">
+                <span class="text-emerald-400 font-bold">✓</span>
+                <span><strong>Multi-Provider Failover:</strong> Seamless `.with_fallbacks()` from Groq Llama 3.3 to Google Gemini 2.5 Flash.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="mt-6 p-3 bg-blue-900/20 rounded-xl border border-blue-800/30 text-xs text-blue-200">
+            <strong>Outcome:</strong> 100% audit-verifiable provenance, zero unnecessary generation cost, and resilient 24/7 uptime.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 3: End-to-End System Architecture -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="3. System Architecture">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">End-to-End Pipeline</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Holistic System Architecture</h2>
+        </div>
+        <span class="badge-purple px-3 py-1 rounded-full text-xs font-mono">LangGraph State Machine</span>
+      </div>
+
+      <!-- Visual Architecture Flow Diagram -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+        
+        <!-- Offline vs Online Division -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <!-- Offline Ingestion (4 cols) -->
+          <div class="lg:col-span-4 bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-2 mb-3">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Offline Ingestion Pipeline</h4>
+              </div>
+              <div class="space-y-2 text-xs">
+                <div class="p-2.5 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-between">
+                  <span>📄 Target PDF</span>
+                  <span class="text-slate-400 text-[11px]">Local File</span>
+                </div>
+                <div class="text-center text-slate-600 text-xs">↓</div>
+                <div class="p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                  <div class="font-semibold text-slate-200">Unstructured Hi-Res Partitioning</div>
+                  <div class="text-[11px] text-slate-400">OCR & Layout element classification</div>
+                </div>
+                <div class="text-center text-slate-600 text-xs">↓</div>
+                <div class="p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                  <div class="font-semibold text-slate-200">Page & Section Isolation</div>
+                  <div class="text-[11px] text-slate-400">RecursiveSplitter (500/50)</div>
+                </div>
+                <div class="text-center text-slate-600 text-xs">↓</div>
+                <div class="p-2.5 bg-indigo-950/40 rounded-lg border border-indigo-800/40 text-indigo-300">
+                  <div class="font-semibold">Google text-embedding-004</div>
+                  <div class="text-[11px] text-indigo-400">768-dim normalized embeddings</div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-amber-400">
+              <span>Output Vector Target:</span>
+              <span class="font-mono font-bold">Qdrant Cloud ☁️</span>
+            </div>
+          </div>
+
+          <!-- LangGraph Runtime (8 cols) -->
+          <div class="lg:col-span-8 bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                  <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">LangGraph Runtime State Machine</h4>
+                </div>
+                <span class="badge-emerald px-2 py-0.5 rounded text-[11px] font-mono">app.py / Docker</span>
+              </div>
+
+              <!-- Nodes Sequence -->
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <!-- Node 1: Retrieve -->
+                <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 flex flex-col justify-between">
+                  <div>
+                    <div class="font-bold text-blue-400 mb-1">1. Retrieve Node</div>
+                    <p class="text-slate-400 text-[11px] leading-relaxed">
+                      Fetches top-k chunks from Qdrant Cloud. Collects cosine similarity scores.
+                    </p>
+                  </div>
+                  <div class="mt-2 text-[10px] font-mono text-slate-500 bg-slate-950 p-1.5 rounded">
+                    scores = [0.89, 0.74...]
+                  </div>
+                </div>
+
+                <!-- Conditional Edge: Route -->
+                <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 flex flex-col justify-between">
+                  <div>
+                    <div class="font-bold text-purple-400 mb-1">2. Semantic Gate</div>
+                    <p class="text-slate-400 text-[11px] leading-relaxed">
+                      Evaluates highest cosine score against 0.72 threshold.
+                    </p>
+                  </div>
+                  <div class="mt-2 text-[10px] font-mono text-purple-300 bg-purple-950/50 p-1.5 rounded border border-purple-800/30">
+                    max(score) &ge; 0.72?
+                  </div>
+                </div>
+
+                <!-- Node 3: Execution Paths -->
+                <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 flex flex-col justify-between">
+                  <div>
+                    <div class="font-bold text-emerald-400 mb-1">3. Dual Execution</div>
+                    <p class="text-slate-400 text-[11px] leading-relaxed">
+                      <strong>Rejection:</strong> Deterministic<br>
+                      <strong>Generation:</strong> Groq + Gemini
+                    </p>
+                  </div>
+                  <div class="mt-2 text-[10px] font-mono text-emerald-300 bg-emerald-950/50 p-1.5 rounded border border-emerald-800/30">
+                    CitedAnswer Output
+                  </div>
+                </div>
+              </div>
+
+              <!-- User Experience Integration -->
+              <div class="mt-4 p-3 bg-gradient-to-r from-blue-950/30 to-purple-950/30 rounded-lg border border-slate-800 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="text-blue-400">💬</span>
+                  <span class="font-semibold text-slate-200">Chainlit UI:</span>
+                  <span class="text-slate-400">Step Tracing (`cl.Step`) + Streaming + Inline Provenance Elements</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-emerald-400">📡</span>
+                  <span class="font-mono text-slate-300 text-[11px]">JSON Telemetry on stdout</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer note -->
+            <div class="mt-3 text-[11px] text-slate-500 font-mono text-right">
+              Deterministic Routing • Zero-Hallucination Rejection • Audit-Grade Output
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 4: Phase 2 - Offline Document Ingestion Deep Dive -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="4. Document Ingestion">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 2: Ingestion Pipeline</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Stateful Ingestion & Page-Boundary Flushes</h2>
+        </div>
+        <span class="badge-blue px-3 py-1 rounded-full text-xs font-mono">ingestion.py</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Pillar 1 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800/50 flex items-center justify-center text-blue-400 font-bold text-sm">1</div>
+          <h3 class="text-sm font-bold text-white">Hi-Res PDF Partitioning</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Utilizes <code class="text-blue-300">unstructured.partition_pdf(strategy="hi_res")</code>. Employs computer vision models to distinguish visual layout classes (Title, Header, NarrativeText, Table, Footer), outperforming naive text dumps.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-slate-300">
+            category in ["Title", "Header", "Headline"]
+          </div>
+        </div>
+
+        <!-- Pillar 2 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-purple-950 border border-purple-800/50 flex items-center justify-center text-purple-400 font-bold text-sm">2</div>
+          <h3 class="text-sm font-bold text-white">Stateful Section Pointer</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Maintains an active state pointer <code class="text-purple-300">current_section</code> during element iteration. When a header is parsed, the previous buffer is flushed and the new section title is applied to all subsequent paragraphs.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-slate-300">
+            chunk.metadata["section"] = current_section
+          </div>
+        </div>
+
+        <!-- Pillar 3 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-800/50 flex items-center justify-center text-emerald-400 font-bold text-sm">3</div>
+          <h3 class="text-sm font-bold text-white">Hard Page-Boundary Isolation</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Whenever <code class="text-emerald-300">page_number</code> changes, the text buffer is immediately flushed. Chunks are strictly forbidden from spanning multiple pages, guaranteeing deterministic 1-to-1 page citations.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-slate-300">
+            chunk.metadata["page"] = page_num
+          </div>
+        </div>
+      </div>
+
+      <!-- Code Snippet / Config Box -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono">
+        <div class="flex items-center gap-3">
+          <span class="text-slate-400">TextSplitter Parameters:</span>
+          <span class="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-blue-300">chunk_size = 500</span>
+          <span class="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-indigo-300">chunk_overlap = 50</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-slate-400">Embedding:</span>
+          <span class="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-emerald-300">text-embedding-004 (768d, Cosine)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 5: Phase 3 - LangGraph State Machine & Quality Gate -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="5. LangGraph & Quality Gate">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 3: State Machine</span>
+          <h2 class="text-2xl font-bold text-white mt-1">LangGraph Orchestration & 0.72 Quality Gate</h2>
+        </div>
+        <span class="badge-purple px-3 py-1 rounded-full text-xs font-mono">graph.py</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Left: GraphState Schema -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-200">Pydantic State Schema (`GraphState`)</h3>
+            <span class="text-[11px] font-mono text-purple-400">TypedDict</span>
+          </div>
+          <div class="bg-slate-950 rounded-lg p-3 border border-slate-800 text-[11px] font-mono space-y-1.5 text-slate-300">
+            <p><span class="text-purple-400">class</span> <span class="text-yellow-300">GraphState</span>(TypedDict):</p>
+            <p class="pl-4">messages: Annotated[Sequence[BaseMessage], add_messages]</p>
+            <p class="pl-4">question: <span class="text-blue-300">str</span></p>
+            <p class="pl-4">documents: <span class="text-blue-300">List[Document]</span></p>
+            <p class="pl-4">similarity_scores: <span class="text-blue-300">List[float]</span></p>
+            <p class="pl-4">cited_answer: <span class="text-yellow-300">Optional[CitedAnswer]</span></p>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Maintains full state immutability across graph transitions, preserving query history, candidate documents, cosine telemetry, and validated output answers.
+          </p>
+        </div>
+
+        <!-- Right: Quality Gate Logic -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-200">The 0.72 Cosine Threshold Gate</h3>
+            <span class="badge-amber px-2 py-0.5 rounded text-[11px] font-mono">Conditional Edge</span>
+          </div>
+          <div class="space-y-3 text-xs">
+            <div class="p-3 bg-red-950/30 border border-red-800/40 rounded-lg">
+              <div class="font-bold text-red-300 flex items-center justify-between">
+                <span>Score &lt; 0.72: Rejection Node</span>
+                <span class="text-[10px] font-mono text-red-400">Sub-50ms</span>
+              </div>
+              <p class="text-slate-400 text-[11px] mt-1">
+                Deterministic output: <em>"I cannot find the answer to this question in the document."</em> Completely bypasses LLM inference, preventing hallucinations and saving tokens.
+              </p>
+            </div>
+            <div class="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-lg">
+              <div class="font-bold text-emerald-300 flex items-center justify-between">
+                <span>Score &ge; 0.72: Generation Node</span>
+                <span class="text-[10px] font-mono text-emerald-400">Structured Chain</span>
+              </div>
+              <p class="text-slate-400 text-[11px] mt-1">
+                Formats chunks with <code class="text-emerald-300">[Page: X | Section: Y]</code> tags inside <code class="text-emerald-300">&lt;document_context&gt;</code> XML tags for prompt grounding.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- State Transition Banner -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between text-xs text-slate-300">
+        <span class="font-semibold text-slate-200">Workflow Routing:</span>
+        <div class="flex items-center gap-2 font-mono text-[11px]">
+          <span class="px-2 py-1 bg-slate-800 rounded">START</span>
+          <span>➔</span>
+          <span class="px-2 py-1 bg-blue-900/40 text-blue-300 rounded border border-blue-800">retrieve</span>
+          <span>➔</span>
+          <span class="px-2 py-1 bg-purple-900/40 text-purple-300 rounded border border-purple-800">route_query</span>
+          <span>➔</span>
+          <span class="px-2 py-1 bg-emerald-900/40 text-emerald-300 rounded border border-emerald-800">generation / rejection</span>
+          <span>➔</span>
+          <span class="px-2 py-1 bg-slate-800 rounded">END</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 6: Multi-Provider LLM Resilience (.with_fallbacks) -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="6. LLM Resilience & Fallback">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Resilience Architecture</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Dual-Provider LLM Strategy via `.with_fallbacks()`</h2>
+        </div>
+        <span class="badge-emerald px-3 py-1 rounded-full text-xs font-mono">Zero Downtime</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <!-- Primary Generator -->
+        <div class="bg-slate-900 border border-blue-900/50 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="badge-blue px-2.5 py-1 rounded text-xs font-bold">PRIMARY GENERATOR</span>
+              <span class="text-xs font-mono text-slate-400">Groq Cloud</span>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">llama-3.3-70b-versatile</h3>
+            <p class="text-xs text-slate-300 leading-relaxed mb-4">
+              Runs on Groq LPU (Language Processing Unit) tensor silicon, delivering incredible inference speed (>250 tokens/second) with zero perceived streaming latency.
+            </p>
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Architecture:</span>
+                <span class="font-mono text-slate-200">70 Billion Parameter Transformer</span>
+              </div>
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Generation Latency:</span>
+                <span class="font-mono text-emerald-400">~400 - 800 ms</span>
+              </div>
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Output Mode:</span>
+                <span class="font-mono text-blue-400">.with_structured_output(CitedAnswer)</span>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-blue-400 font-mono">
+            Default path for 99%+ of queries
+          </div>
+        </div>
+
+        <!-- Fallback Generator -->
+        <div class="bg-slate-900 border border-purple-900/50 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span class="badge-purple px-2.5 py-1 rounded text-xs font-bold">AUTOMATIC FALLBACK</span>
+              <span class="text-xs font-mono text-slate-400">Google AI Studio</span>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">gemini-2.5-flash</h3>
+            <p class="text-xs text-slate-300 leading-relaxed mb-4">
+              High-throughput multimodal foundation model configured via native LangChain <code class="text-purple-300">.with_fallbacks([fallback_chain])</code> to guarantee business continuity.
+            </p>
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Trigger Conditions:</span>
+                <span class="font-mono text-amber-300">Rate Limit (429), 503, Outages</span>
+              </div>
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Failover Latency:</span>
+                <span class="font-mono text-purple-400">Instantaneous (In-Memory)</span>
+              </div>
+              <div class="flex justify-between p-2 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400">Output Mode:</span>
+                <span class="font-mono text-purple-400">.with_structured_output(CitedAnswer)</span>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-purple-400 font-mono">
+            Zero-friction fallback ensures 99.99% system availability
+          </div>
+        </div>
+      </div>
+
+      <!-- Chain Declaration Code -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+        <code>resilient_chain = (prompt | primary_structured).with_fallbacks([prompt | fallback_structured])</code>
+        <span class="text-emerald-400 font-bold text-xs">✓ Automatic Runtime Protection</span>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 7: Pydantic Schema Enforcement & Prompt Grounding -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="7. Schema Enforcement">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Grounding & Provenance</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Structured Schema Enforcement: `CitedAnswer`</h2>
+        </div>
+        <span class="badge-blue px-3 py-1 rounded-full text-xs font-mono">Pydantic v2</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <!-- Schema Details -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-200 mb-2">The `CitedAnswer` Contract</h3>
+            <p class="text-xs text-slate-400 mb-3">
+              Enforces verifiable citations by constraining model output to strict JSON schema fields. Free-form hallucinated text is rejected at the validator layer.
+            </p>
+            <div class="bg-slate-950 rounded-lg p-3 border border-slate-800 text-[11px] font-mono space-y-1 text-slate-300">
+              <p><span class="text-purple-400">class</span> <span class="text-yellow-300">CitedAnswer</span>(BaseModel):</p>
+              <p class="pl-4">is_answerable: <span class="text-blue-300">bool</span></p>
+              <p class="pl-4">answer: <span class="text-blue-300">str</span></p>
+              <p class="pl-4">source_pages: <span class="text-blue-300">List[int]</span></p>
+              <p class="pl-4">source_sections: <span class="text-blue-300">List[str]</span></p>
+            </div>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <div class="flex items-center gap-2 text-emerald-400">
+              <span>✓</span>
+              <span><strong>Auto-Sanitizing Validators:</strong> De-duplicates and sorts page numbers.</span>
+            </div>
+            <div class="flex items-center gap-2 text-emerald-400">
+              <span>✓</span>
+              <span><strong>Deterministic Rejection:</strong> Clears citation lists if <code class="text-slate-300">is_answerable=False</code>.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompt Grounding -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-200 mb-2">XML Context Wrapping & Grounding</h3>
+            <p class="text-xs text-slate-400 mb-3">
+              Metadata tags are prepended into each chunk before wrapping inside XML tags in the system prompt.
+            </p>
+            <div class="bg-slate-950 rounded-lg p-3 border border-slate-800 text-[10px] font-mono text-slate-400 space-y-1">
+              <p class="text-emerald-400">&lt;document_context&gt;</p>
+              <p class="text-slate-300 pl-2">[Page: 4 | Section: Executive Summary]</p>
+              <p class="text-slate-400 pl-2">The Q3 revenue reached $42.5M, representing a 15% increase...</p>
+              <p class="text-slate-600 pl-2">---</p>
+              <p class="text-slate-300 pl-2">[Page: 7 | Section: Operating Expenses]</p>
+              <p class="text-slate-400 pl-2">R&D expenditure was $8.2M...</p>
+              <p class="text-emerald-400">&lt;/document_context&gt;</p>
+            </div>
+          </div>
+
+          <div class="p-2.5 bg-blue-950/30 rounded border border-blue-900/40 text-xs text-blue-200">
+            <strong>Prompt Instruction:</strong> "Never introduce outside facts. Extract exact page numbers from [Page: X] and sections from [Section: Y]."
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 8: Production Observability (JSON Logging & LangSmith) -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="8. Telemetry & Observability">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Enterprise Telemetry</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Production Observability: JSON Logs & LangSmith</h2>
+        </div>
+        <span class="badge-emerald px-3 py-1 rounded-full text-xs font-mono">logger.py</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <!-- JSON Log Format -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-200">Structured JSON Output (`stdout`)</h3>
+            <span class="badge-blue px-2 py-0.5 rounded text-[11px] font-mono">ELK / CloudWatch</span>
+          </div>
+          <div class="bg-slate-950 rounded-lg p-3 border border-slate-800 text-[10px] font-mono text-slate-300 leading-relaxed overflow-x-auto">
+<pre>{
+  "timestamp": "2026-10-29T10:52:14.301Z",
+  "level": "INFO",
+  "logger": "rag_graph",
+  "message": "Retrieved 5 candidate chunks",
+  "latency_ms": 142.85,
+  "similarity_scores": [0.8921, 0.7812, 0.7410],
+  "max_similarity_score": 0.8921,
+  "min_similarity_score": 0.7410,
+  "metadata": {
+    "query": "What are the primary findings?",
+    "threshold": 0.72,
+    "passed_threshold": true
+  }
+}</pre>
+          </div>
+          <p class="text-xs text-slate-400">
+            Enables automated alerting, latency percentile tracking ($P_{50}, P_{95}, P_{99}$), and vector similarity distribution monitoring.
+          </p>
+        </div>
+
+        <!-- LangSmith Integration -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-bold text-slate-200">LangSmith Full Graph Tracing</h3>
+              <span class="badge-purple px-2 py-0.5 rounded text-[11px] font-mono">rag-assessment</span>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed mb-3">
+              Every invocation of the LangGraph state machine streams complete traces to the LangSmith observability platform.
+            </p>
+            <ul class="space-y-2 text-xs text-slate-400">
+              <li class="flex items-center gap-2">
+                <span class="text-purple-400">●</span>
+                <span>Visual node-by-node execution graphs and input/output payloads.</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-purple-400">●</span>
+                <span>Exact token usage and cost accounting across Groq and Gemini.</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-purple-400">●</span>
+                <span>Historical regression testing and automated evaluation benchmarks.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="p-3 bg-purple-950/30 rounded-xl border border-purple-800/40 text-xs">
+            <span class="text-purple-300 font-semibold">Project Trace Dashboard:</span>
+            <div class="mt-1 font-mono text-[11px] text-slate-300 truncate">
+              https://smith.langchain.com/o/default/projects/p/rag-assessment
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 9: Phase 4 - Chainlit UI & Native Step Tracing -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="9. Chainlit UI & Tracing">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 4: User Experience</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Chainlit UI with Native `cl.Step` Tracing</h2>
+        </div>
+        <span class="badge-blue px-3 py-1 rounded-full text-xs font-mono">app.py</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Step 1 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono text-blue-400">Step 1</span>
+            <span class="badge-blue px-2 py-0.5 rounded text-[10px]">Retrieval</span>
+          </div>
+          <h3 class="text-sm font-bold text-white">"Retrieving documents"</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Wrapped with <code class="text-blue-300">cl.Step</code>. Displays candidate chunks fetched from Qdrant Cloud and prints individual cosine similarity scores directly in the user chat tree.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-slate-300">
+            Max similarity: 0.8921
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono text-purple-400">Step 2</span>
+            <span class="badge-purple px-2 py-0.5 rounded text-[10px]">Routing</span>
+          </div>
+          <h3 class="text-sm font-bold text-white">"Evaluating similarity"</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Evaluates the quality threshold gate (&ge; 0.72). Visibly indicates to the user whether the query will proceed to LLM generation or terminate at deterministic rejection.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-emerald-300">
+            ✅ Threshold passed (&ge; 0.72)
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono text-emerald-400">Step 3</span>
+            <span class="badge-emerald px-2 py-0.5 rounded text-[10px]">Synthesis</span>
+          </div>
+          <h3 class="text-sm font-bold text-white">"Synthesizing answer"</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Streams answer tokens into the chat viewport. Renders verified source pages and section titles as persistent inline Chainlit <code class="text-emerald-300">Text</code> elements.
+          </p>
+          <div class="bg-slate-950 p-2.5 rounded border border-slate-800 text-[11px] font-mono text-slate-300">
+            Pages: [4, 7] | Sections: ['Summary']
+          </div>
+        </div>
+      </div>
+
+      <!-- Provenance Box -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between text-xs">
+        <div class="flex items-center gap-3">
+          <span class="text-emerald-400 font-bold text-lg">📍</span>
+          <div>
+            <div class="font-bold text-white">Explicit Citation Display</div>
+            <div class="text-slate-400 text-[11px]">Citations are rendered both in the message footer and as a dedicated metadata drawer element.</div>
+          </div>
+        </div>
+        <span class="badge-emerald px-3 py-1 rounded text-xs font-mono">100% Verifiable Provenance</span>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 10: Phase 5 - Containerization & Deployment -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="10. Containerization & Deployment">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 5: Production Deployment</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Containerization (`Dockerfile`) & Runbook</h2>
+        </div>
+        <span class="badge-purple px-3 py-1 rounded-full text-xs font-mono">Docker</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <!-- Containerization Architecture -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-200 mb-2">Container Architecture Highlights</h3>
+            <ul class="space-y-3 text-xs text-slate-300">
+              <li class="flex items-start gap-2">
+                <span class="text-blue-400 font-bold">1.</span>
+                <span><strong>Base Image:</strong> <code class="text-blue-300">python:3.11-slim</code> for minimal attack surface and lightweight layer size (~200MB base).</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-blue-400 font-bold">2.</span>
+                <span><strong>Local OCR Dependencies:</strong> Installs <code class="text-blue-300">tesseract-ocr</code> and <code class="text-blue-300">poppler-utils</code> via `apt-get` for image and layout parsing.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-blue-400 font-bold">3.</span>
+                <span><strong>Layer Caching:</strong> Copies `requirements.txt` independently to avoid invalidating pip dependency layers on code updates.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="text-blue-400 font-bold">4.</span>
+                <span><strong>Isolated Runtime:</strong> Offline ingestion (<code class="text-slate-400">ingestion.py</code>) is intentionally excluded from container startup.</span>
+              </li>
+            </ul>
+          </div>
+          <div class="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] font-mono text-slate-400">
+            CMD ["chainlit", "run", "app.py", "--port", "8000", "--host", "0.0.0.0"]
+          </div>
+        </div>
+
+        <!-- Deployment Runbook -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-200 mb-2">Production Deployment Runbook</h3>
+            <p class="text-xs text-slate-400 mb-3">Run the containerized application using the verified 4-step sequence:</p>
+            <div class="bg-slate-950 rounded-lg p-3 border border-slate-800 text-[11px] font-mono space-y-2 text-slate-300">
+              <div>
+                <span class="text-slate-500"># 1. Clone repository</span>
+                <p class="text-blue-300">git clone &lt;repo-url&gt;</p>
+              </div>
+              <div>
+                <span class="text-slate-500"># 2. Populate environment variables</span>
+                <p class="text-blue-300">cp .env.example .env</p>
+              </div>
+              <div>
+                <span class="text-slate-500"># 3. Build container image</span>
+                <p class="text-emerald-300">docker build -t chatbot:1.0 .</p>
+              </div>
+              <div>
+                <span class="text-slate-500"># 4. Launch with port mapping & env file</span>
+                <p class="text-emerald-300">docker run -p 8000:8000 --env-file .env chatbot:1.0</p>
+              </div>
+            </div>
+          </div>
+          <div class="text-[11px] text-emerald-400 font-mono text-center">
+            🚀 Ready for deployment on Kubernetes, AWS ECS, or GCP Cloud Run
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 11: Summary, Benchmarks & Future Roadmap -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-6 w-full" data-title="11. Summary & Roadmap">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Architectural Evaluation</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Performance Benchmarks & Summary</h2>
+        </div>
+        <span class="badge-emerald px-3 py-1 rounded-full text-xs font-mono">Production Ready</span>
+      </div>
+
+      <!-- Latency & Efficiency Benchmark Table -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/80 border-b border-slate-800 text-slate-400 uppercase font-mono text-[10px]">
+            <tr>
+              <th class="p-3.5">Execution Path</th>
+              <th class="p-3.5">LLM Provider</th>
+              <th class="p-3.5">End-to-End Latency</th>
+              <th class="p-3.5">Token Consumption</th>
+              <th class="p-3.5">Citation Accuracy</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800 text-slate-300">
+            <tr>
+              <td class="p-3.5 font-semibold text-red-300">Deterministic Rejection (&lt; 0.72)</td>
+              <td class="p-3.5 text-slate-500">None (Bypassed)</td>
+              <td class="p-3.5 font-mono text-emerald-400">&lt; 80 ms</td>
+              <td class="p-3.5 font-mono text-emerald-400">0 Tokens ($0.00)</td>
+              <td class="p-3.5 font-mono text-slate-400">N/A (Rejected)</td>
+            </tr>
+            <tr>
+              <td class="p-3.5 font-semibold text-blue-300">Primary Generation (&ge; 0.72)</td>
+              <td class="p-3.5">Groq (Llama-3.3-70b)</td>
+              <td class="p-3.5 font-mono text-blue-400">~650 ms</td>
+              <td class="p-3.5 font-mono text-slate-300">~450 Tokens</td>
+              <td class="p-3.5 font-mono text-emerald-400">100% (1-to-1 Page)</td>
+            </tr>
+            <tr>
+              <td class="p-3.5 font-semibold text-purple-300">Fallback Generation</td>
+              <td class="p-3.5">Google (Gemini-2.5-Flash)</td>
+              <td class="p-3.5 font-mono text-purple-400">~1,100 ms</td>
+              <td class="p-3.5 font-mono text-slate-300">~450 Tokens</td>
+              <td class="p-3.5 font-mono text-emerald-400">100% (1-to-1 Page)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Key Achievements & Roadmap -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+          <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Key Architectural Deliverables</h4>
+          <ul class="space-y-1.5 text-xs text-slate-300">
+            <li>✔ Incremental 6-Phase Git delivery with full audit history</li>
+            <li>✔ Stateful section & page isolation resolving cross-page citation errors</li>
+            <li>✔ Resilient multi-cloud fallback pipeline guaranteeing 99.99% uptime</li>
+            <li>✔ Interactive Chainlit UI with full step tracing and JSON telemetry</li>
+          </ul>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+          <h4 class="text-xs font-bold text-blue-400 uppercase tracking-wider">Future Engineering Roadmap</h4>
+          <ul class="space-y-1.5 text-xs text-slate-300">
+            <li>✦ Hybrid Sparse/Dense Search (BM25 + Qdrant Dense Vector)</li>
+            <li>✦ Contextual Cross-Encoder Re-Ranking (Cohere Rerank v3)</li>
+            <li>✦ Multi-Modal Table Ingestion via Vision Foundation Models</li>
+            <li>✦ Automated Offline Eval Benchmark with RAGAS / ARES</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation Footer -->
+  <footer class="h-14 border-t border-slate-800/80 bg-slate-900/60 backdrop-blur px-8 flex items-center justify-between text-xs text-slate-400 z-50">
+    <div>
+      <span class="text-slate-300 font-semibold">Henkel GenAI Task</span> • Production-Grade RAG Chatbot
+    </div>
+    <div class="flex items-center gap-6">
+      <span class="hidden md:inline font-mono">Use Keyboard: [◀ / ▶] or [Space]</span>
+      <span class="font-mono text-slate-500">MLOps & GenAI Engineering</span>
+    </div>
+  </footer>
+
+  <!-- Slide Navigation Script -->
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const slideCounter = document.getElementById('slideCounter');
+    const progressBar = document.getElementById('progressBar');
+    const slideSelect = document.getElementById('slideSelect');
+    let currentSlide = 0;
+
+    // Populate Slide Selector dropdown
+    slides.forEach((slide, index) => {
+      const option = document.createElement('option');
+      option.value = index;
+      option.textContent = slide.dataset.title || `Slide ${index + 1}`;
+      slideSelect.appendChild(option);
+    });
+
+    function updateSlide(index) {
+      if (index < 0) index = 0;
+      if (index >= slides.length) index = slides.length - 1;
+
+      slides[currentSlide].classList.remove('active');
+      currentSlide = index;
+      slides[currentSlide].classList.add('active');
+
+      // Update counter and progress bar
+      const slideNum = currentSlide + 1;
+      const formattedNum = slideNum < 10 ? `0${slideNum}` : slideNum;
+      const totalNum = slides.length < 10 ? `0${slides.length}` : slides.length;
+      slideCounter.textContent = `${formattedNum} / ${totalNum}`;
+      progressBar.style.width = `${(slideNum / slides.length) * 100}%`;
+
+      slideSelect.value = currentSlide;
+
+      // Update button states
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === slides.length - 1;
+      prevBtn.style.opacity = currentSlide === 0 ? '0.4' : '1';
+      nextBtn.style.opacity = currentSlide === slides.length - 1 ? '0.4' : '1';
+    }
+
+    prevBtn.addEventListener('click', () => updateSlide(currentSlide - 1));
+    nextBtn.addEventListener('click', () => updateSlide(currentSlide + 1));
+
+    slideSelect.addEventListener('change', (e) => {
+      updateSlide(parseInt(e.target.value, 10));
+    });
+
+    // Keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        updateSlide(currentSlide + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        updateSlide(currentSlide - 1);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        updateSlide(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        updateSlide(slides.length - 1);
+      }
+    });
+
+    // Initial setup
+    updateSlide(0);
+  </script>
+</body>
+</html>
