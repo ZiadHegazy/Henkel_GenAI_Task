@@ -1,31 +1,32 @@
 """
-graph.py - LangGraph RAG State Machine with Provenance Enforcement
-===================================================================
+graph.py - LangGraph RAG State Machine with Intent Routing & Provenance
+========================================================================
 
 Architecture Overview:
 ----------------------
-1. State Management:
+1. Intent Prediction:
+   - Classifies query intent ('greeting' vs. 'document_query').
+   - Handles conversational greetings ("hello", "who are you") warmly without
+     failing into document rejection.
+
+2. State Management & Multi-Turn Memory:
    - Maintains a TypedDict state (`GraphState`) holding conversation messages,
-     user query, retrieved documents, similarity scores, and structured answers.
+     user query, intent, retrieved documents, similarity scores, and structured answers.
+   - Leverages conversation history across turns to resolve pronouns and follow-up queries.
 
-2. Strict Provenance Output Schema:
-   - Uses Pydantic `CitedAnswer` to guarantee validation of answerability,
-     synthesized text, 1-to-1 page citations (`source_pages`), and section citations
-     (`source_sections`).
+3. Strict Provenance Output Schema:
+   - Uses Pydantic `CitedAnswer` to enforce answerability, synthesized text,
+     1-to-1 page citations (`source_pages`), and section citations (`source_sections`).
 
-3. Retrieval & Semantic Routing:
-   - Fetches candidate chunks from Qdrant Cloud with Cosine Similarity.
-   - Enforces a deterministic quality gate: if max(similarity_scores) < 0.72,
-     bypasses LLM generation directly to the Rejection Node.
+4. Retrieval & Semantic Routing:
+   - Fetches candidate chunks from Qdrant Cloud.
+   - Enforces the 0.72 Cosine Similarity Gate: if max(similarity_scores) < 0.72,
+     routes to the Rejection Node.
 
-4. Prompt Grounding & Model Fallbacks:
+5. Prompt Grounding & Model Fallbacks:
    - Injects section and page tags directly into chunk texts inside `<document_context>`.
    - Uses Groq (`llama-3.3-70b-versatile`) as primary generator bound with structured output.
    - Configures Google (`gemini-2.5-flash`) via `.with_fallbacks()` for resilient failover.
-
-5. Observability:
-   - Integrates with `logger.py` to stream JSON-formatted latency, similarity scores,
-     and routing decisions to stdout.
 """
 
 from __future__ import annotations
@@ -52,6 +53,25 @@ rag_logger = get_json_logger("rag_graph")
 
 REJECTION_MESSAGE = "I cannot find the answer to this question in the document."
 SIMILARITY_THRESHOLD = 0.72
+
+GREETING_MESSAGE = (
+    "Hello! 👋 I am your Enterprise Document Assistant.\n\n"
+    "I am specialized in answering questions strictly grounded in your indexed documents, "
+    "complete with verified 1-to-1 page citations and hierarchical section tracking.\n\n"
+    "**You can ask me about:**\n"
+    "- Key facts, methodologies, metrics, and findings in your documents\n"
+    "- Specific data points, clauses, or policy details\n"
+    "- Section summaries and comparative insights\n\n"
+    "What question would you like to explore today?"
+)
+
+GREETING_PATTERNS = {
+    "hello", "hi", "hey", "greetings", "good morning", "good afternoon",
+    "good evening", "howdy", "sup", "yo", "who are you", "what are you",
+    "what can you do", "help", "what is this", "thanks", "thank you",
+    "bye", "goodbye", "see you", "how are you", "nice to meet you",
+    "welcome", "start", "restart", "clear"
+}
 
 
 # ------------------------------------------------------------------------------
@@ -111,6 +131,7 @@ class GraphState(TypedDict):
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     question: str
+    intent: Optional[str]
     documents: List[Document]
     similarity_scores: List[float]
     cited_answer: Optional[CitedAnswer]
@@ -122,13 +143,40 @@ class PydanticGraphState(BaseModel):
     """
     messages: List[Any] = Field(default_factory=list)
     question: str
+    intent: Optional[str] = None
     documents: List[Any] = Field(default_factory=list)
     similarity_scores: List[float] = Field(default_factory=list)
     cited_answer: Optional[CitedAnswer] = None
 
 
 # ------------------------------------------------------------------------------
-# 2. Vector Store Initialization
+# 2. Intent Prediction Logic
+# ------------------------------------------------------------------------------
+
+def predict_intent(query: str) -> str:
+    """
+    Classify query intent into 'greeting' or 'document_query'.
+    Prevents casual greetings from triggering document rejection.
+    """
+    cleaned = query.strip().lower()
+    stripped = "".join(ch for ch in cleaned if ch.isalnum() or ch.isspace()).strip()
+
+    if stripped in GREETING_PATTERNS:
+        return "greeting"
+
+    for pattern in GREETING_PATTERNS:
+        if stripped.startswith(pattern) and len(stripped) <= len(pattern) + 12:
+            return "greeting"
+
+    tokens = stripped.split()
+    if len(tokens) <= 3 and any(t in ("hello", "hi", "hey", "thanks", "thank", "help") for t in tokens):
+        return "greeting"
+
+    return "document_query"
+
+
+# ------------------------------------------------------------------------------
+# 3. Vector Store Initialization
 # ------------------------------------------------------------------------------
 
 def get_vector_store(collection_name: Optional[str] = None):
@@ -146,7 +194,6 @@ def get_vector_store(collection_name: Optional[str] = None):
     if not gemini_key:
         raise ValueError("Missing GEMINI_API_KEY or GOOGLE_API_KEY in environment variables.")
 
-    # Ensure GOOGLE_API_KEY is available in the environment
     os.environ["GOOGLE_API_KEY"] = gemini_key
 
     # Auto-resolve active Google embedding model with fallback
@@ -181,7 +228,7 @@ def get_vector_store(collection_name: Optional[str] = None):
 
 
 # ------------------------------------------------------------------------------
-# 3. LLM Factory (Primary Groq + Fallback Gemini)
+# 4. LLM Factory (Primary Groq + Fallback Gemini)
 # ------------------------------------------------------------------------------
 
 def build_llm_chains():
@@ -207,7 +254,7 @@ def build_llm_chains():
         temperature=0.0,
     )
 
-    # Fallback generator: Google Gemini (gemini-2.5-flash or gemini-1.5-flash)
+    # Fallback generator: Google Gemini
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     fallback_llm = ChatGoogleGenerativeAI(
         model=gemini_model,
@@ -227,36 +274,73 @@ def build_llm_chains():
             "and leave `source_pages` and `source_sections` empty.\n"
             "3. When `is_answerable` is True, extract every source page number from `[Page: X]` into `source_pages` (as integers).\n"
             "4. Extract every source section header from `[Section: Y]` into `source_sections` (as strings).\n"
-            "5. Never use outside knowledge or introduce ungrounded speculation.\n\n"
+            "5. If the user refers to previous context ('it', 'that', 'they', 'the previous year'), use the recent conversation history to resolve the reference, while ensuring every factual claim is strictly supported by the document context.\n"
+            "6. Never use outside knowledge or introduce ungrounded speculation.\n\n"
+            "<recent_conversation_history>\n{history}\n</recent_conversation_history>\n\n"
             "<document_context>\n{context}\n</document_context>",
         ),
         ("human", "{question}"),
     ])
 
-    # Bind Pydantic CitedAnswer schema to both models
     primary_structured = primary_llm.with_structured_output(CitedAnswer)
     fallback_structured = fallback_llm.with_structured_output(CitedAnswer)
 
-    # Construct primary and fallback runnable chains
     primary_chain = prompt | primary_structured
     fallback_chain = prompt | fallback_structured
 
-    # Chain with native LangChain fallback mechanism
     resilient_chain = primary_chain.with_fallbacks([fallback_chain])
     return resilient_chain, prompt, primary_structured, fallback_structured
 
 
 # ------------------------------------------------------------------------------
-# 4. Graph Nodes & Routing Logic
+# 5. Graph Nodes & Routing Logic
 # ------------------------------------------------------------------------------
+
+def intent_classifier_node(state: GraphState) -> Dict[str, Any]:
+    """
+    Intent Classifier Node:
+    Predicts intent to distinguish casual greetings from document inquiries.
+    """
+    question = state.get("question", "")
+    intent = predict_intent(question)
+    rag_logger.info(
+        f"Intent classified: '{intent}' for query: '{question}'",
+        extra={"metadata": {"intent": intent, "query": question}},
+    )
+    return {"intent": intent}
+
+
+def route_intent(state: GraphState) -> str:
+    """Conditional Edge: Route based on intent."""
+    intent = state.get("intent", "document_query")
+    if intent == "greeting":
+        return "greeting"
+    return "document_query"
+
+
+def greeting_node(state: GraphState) -> Dict[str, Any]:
+    """
+    Greeting Node:
+    Provides a helpful, conversational response without document search.
+    """
+    rag_logger.info("Executing Greeting Node (conversational intent).")
+    ans = CitedAnswer(
+        is_answerable=True,
+        answer=GREETING_MESSAGE,
+        source_pages=[],
+        source_sections=[],
+    )
+    return {
+        "cited_answer": ans,
+        "messages": [AIMessage(content=GREETING_MESSAGE)],
+    }
+
 
 def retrieve_node(state: GraphState) -> Dict[str, Any]:
     """
     Retrieve Node:
-    Queries Qdrant for top-k chunks, collects cosine similarity scores,
-    and logs retrieval latency and metrics.
+    Queries Qdrant for top-k chunks and logs cosine similarity metrics.
     """
-    # Extract query from question field or latest HumanMessage
     question = state.get("question")
     if not question and state.get("messages"):
         for m in reversed(state["messages"]):
@@ -300,7 +384,6 @@ def route_query(state: GraphState) -> str:
     """
     Conditional Routing Function:
     Evaluates highest similarity score against threshold (0.72).
-    Routes to 'rejection' if max_score < 0.72, else to 'generation'.
     """
     scores = state.get("similarity_scores", [])
     max_score = max(scores) if scores else 0.0
@@ -328,20 +411,15 @@ def route_query(state: GraphState) -> str:
 def rejection_node(state: GraphState) -> Dict[str, Any]:
     """
     Rejection Node:
-    Deterministically outputs standard rejection message without calling LLMs.
+    Outputs standard rejection message deterministically without LLM inference.
     """
-    rag_logger.info(
-        "Executing Rejection Node (query failed similarity threshold).",
-        extra={"metadata": {"action": "deterministic_rejection"}},
-    )
-
+    rag_logger.info("Executing Rejection Node (query failed similarity threshold).")
     answer_obj = CitedAnswer(
         is_answerable=False,
         answer=REJECTION_MESSAGE,
         source_pages=[],
         source_sections=[],
     )
-
     return {
         "cited_answer": answer_obj,
         "messages": [AIMessage(content=REJECTION_MESSAGE)],
@@ -351,8 +429,8 @@ def rejection_node(state: GraphState) -> Dict[str, Any]:
 def generation_node(state: GraphState) -> Dict[str, Any]:
     """
     Generation Node:
-    Prepends metadata into chunks, wraps in <document_context> XML tags,
-    and invokes the primary Groq chain with Google Gemini fallback.
+    Prepends metadata into chunks, builds conversation history context,
+    and invokes Groq with Gemini fallback.
     """
     documents = state.get("documents", [])
     question = state.get("question", "")
@@ -367,6 +445,15 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
 
     context_str = "\n\n---\n\n".join(formatted_chunks)
 
+    # Format multi-turn conversation history
+    history_turns: List[str] = []
+    if state.get("messages"):
+        for msg in state["messages"][:-1]:
+            sender = "User" if isinstance(msg, HumanMessage) or getattr(msg, "type", "") == "human" else "Assistant"
+            text = str(msg.content)[:300].strip()
+            history_turns.append(f"{sender}: {text}")
+    history_str = "\n".join(history_turns[-6:]) if history_turns else "No prior conversation."
+
     start_time = time.perf_counter()
     used_model = "llama-3.3-70b-versatile"
     is_fallback = False
@@ -376,10 +463,10 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
         resilient_chain, prompt, primary_structured, fallback_structured = build_llm_chains()
 
         try:
-            # Attempt primary Groq execution
             primary_chain = prompt | primary_structured
             cited_answer = primary_chain.invoke({
                 "context": context_str,
+                "history": history_str,
                 "question": question,
             })
         except Exception as groq_err:
@@ -393,6 +480,7 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
             fallback_chain = prompt | fallback_structured
             cited_answer = fallback_chain.invoke({
                 "context": context_str,
+                "history": history_str,
                 "question": question,
             })
     except Exception as fatal_err:
@@ -406,7 +494,6 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
 
     latency_ms = (time.perf_counter() - start_time) * 1000
 
-    # Ensure rejection message consistency if not answerable
     if not cited_answer.is_answerable:
         cited_answer.answer = REJECTION_MESSAGE
         cited_answer.source_pages = []
@@ -427,20 +514,30 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
 
 
 # ------------------------------------------------------------------------------
-# 5. LangGraph Assembly
+# 6. LangGraph Assembly
 # ------------------------------------------------------------------------------
 
 def create_rag_graph() -> StateGraph:
-    """Compile the LangGraph state machine with conditional routing."""
+    """Compile the LangGraph state machine with intent classification and conditional routing."""
     workflow = StateGraph(GraphState)
 
     # Register nodes
+    workflow.add_node("intent_classifier", intent_classifier_node)
+    workflow.add_node("greeting", greeting_node)
     workflow.add_node("retrieve", retrieve_node)
     workflow.add_node("rejection", rejection_node)
     workflow.add_node("generation", generation_node)
 
     # Register edges
-    workflow.add_edge(START, "retrieve")
+    workflow.add_edge(START, "intent_classifier")
+    workflow.add_conditional_edges(
+        "intent_classifier",
+        route_intent,
+        {
+            "greeting": "greeting",
+            "document_query": "retrieve",
+        },
+    )
     workflow.add_conditional_edges(
         "retrieve",
         route_query,
@@ -449,6 +546,7 @@ def create_rag_graph() -> StateGraph:
             "generation": "generation",
         },
     )
+    workflow.add_edge("greeting", END)
     workflow.add_edge("rejection", END)
     workflow.add_edge("generation", END)
 
@@ -462,11 +560,12 @@ rag_app = create_rag_graph()
 if __name__ == "__main__":
     import sys
 
-    test_query = sys.argv[1] if len(sys.argv) > 1 else "What are the key findings?"
+    test_query = sys.argv[1] if len(sys.argv) > 1 else "hello"
     print(f"Running LangGraph RAG evaluation on test query: '{test_query}'")
     initial_state: GraphState = {
         "messages": [HumanMessage(content=test_query)],
         "question": test_query,
+        "intent": None,
         "documents": [],
         "similarity_scores": [],
         "cited_answer": None,

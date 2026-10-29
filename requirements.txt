@@ -8,5 +8,6 @@ langchain-qdrant
 langchain-groq
 langchain-google-genai
 pypdf
+aiosqlite
 pydantic
 python-dotenv
