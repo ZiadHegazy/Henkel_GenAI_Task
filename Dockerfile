@@ -10,14 +10,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set working directory inside container
 WORKDIR /app
 
-# Install system dependencies required for OCR and document processing
+# Install system dependencies required for OCR, PDF rendering, and OpenCV headless image processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     poppler-utils \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-install lightweight CPU-only PyTorch to PREVENT downloading 4+ GB of NVIDIA CUDA / Triton GPU runtimes
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Pre-install headless OpenCV so cv2 runs in server environments without desktop OpenGL display
+RUN pip install --no-cache-dir opencv-python-headless
 
 # Copy requirements file first for layer caching
 COPY requirements.txt .
