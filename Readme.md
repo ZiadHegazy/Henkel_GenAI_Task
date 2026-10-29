@@ -11,20 +11,22 @@ The system processes queries through a deterministic state machine orchestrated 
 ```mermaid
 flowchart TD
     subgraph Offline Ingestion ["Phase 2: Offline Document Ingestion (Fast Text Mode)"]
-        PDF["Input PDF Document"] --> Partition["unstructured partition_pdf (fast text, images bypassed)"]
+        PDF["Input PDF Document"] --> Partition["pypdf Digital Text Extractor (fast text, images bypassed)"]
         Partition --> Grouping["Page-Bounded & Section-Aware Buffering"]
         Grouping --> Splitter["RecursiveCharacterTextSplitter (size: 500, overlap: 50)"]
-        Splitter --> Embed["Google AI Studio (text-embedding-004, 768-dim)"]
+        Splitter --> Embed["Google AI Studio (gemini-embedding-001, 3072-dim)"]
         Embed --> QdrantCloud[("Qdrant Cloud Vector Database")]
     end
 
     subgraph LangGraph Runtime ["Phase 3: LangGraph State Machine & Orchestration"]
-        UserQuery(["User Query"]) --> RetrieveNode["Node: Retrieve Chunks (Top-k ANN)"]
+        UserQuery(["User Query"]) --> IntentNode["Node: Intent Classifier (predict_intent)"]
+        IntentNode -- "greeting" --> GreetingNode["Node: Conversational Assistant\n(Warm Greeting & System Overview)"]
+        IntentNode -- "document_query" --> RetrieveNode["Node: Retrieve Chunks (Top-k ANN)"]
         QdrantCloud -.->|Cosine Search| RetrieveNode
         RetrieveNode --> RoutingGate{"Conditional Edge: Max Cosine Score >= 0.72?"}
         
         RoutingGate -- "< 0.72" --> RejectionNode["Node: Deterministic Rejection\n'I cannot find the answer...'"]
-        RoutingGate -- ">= 0.72" --> GenerationNode["Node: Structured Generation\n(Prepends [Page: X | Section: Y])"]
+        RoutingGate -- ">= 0.72" --> GenerationNode["Node: Structured Generation\n(Context + Multi-Turn Memory)"]
 
         subgraph Resilient LLM Chains [".with_fallbacks()"]
             PrimaryLLM["Primary: Groq (llama-3.3-70b-versatile)"]
@@ -38,10 +40,12 @@ flowchart TD
         FallbackLLM --> PydanticValidation
     end
 
-    subgraph UI & Observability ["Phases 3 & 4: Interface & Telemetry"]
-        PydanticValidation --> ChainlitUI["Chainlit Chat UI (app.py)"]
+    subgraph UI & Persistence ["Phases 3 & 4: Interface, SQLite History & Telemetry"]
+        GreetingNode --> ChainlitUI["Chainlit Chat UI (app.py)"]
+        PydanticValidation --> ChainlitUI
         RejectionNode --> ChainlitUI
-        ChainlitUI --> Steps["cl.Step Tracing: Retrieval, Evaluation, Synthesis"]
+        ChainlitUI <-->|Async CRUD| SQLiteDB[("SQLite Chat Persistence (database.py)\n- Users, Threads, Steps, Feedback\n- Multi-Session Resumption")]
+        ChainlitUI --> Steps["cl.Step Tracing: Intent, Retrieval, Evaluation, Synthesis"]
         ChainlitUI --> Citations["Explicit Citation Elements (Pages & Sections)"]
         RetrieveNode -.-> JSONLog["JSON Structured Logger (stdout)"]
         GenerationNode -.-> JSONLog
@@ -88,6 +92,17 @@ class CitedAnswer(BaseModel):
   - Model provenance and fallback indicators (`is_fallback`, `model`)
   - Output answerability and citation volume (`citations_count`)
 
+### 6. Intent Prediction & Conversational Routing (`graph.py`)
+- Casual conversational inputs ("hello", "good morning", "who are you", "what can you do") lack high cosine similarity against factual document chunks and would otherwise trigger the 0.72 quality rejection gate.
+- The **Intent Classifier Node** evaluates user input prior to retrieval. Greetings bypass vector search completely and route to a dedicated **Greeting Node**, welcoming the user and explaining system capabilities warmly without false rejections.
+- Factual and technical questions proceed directly to Qdrant vector retrieval.
+
+### 7. SQLite Chat Persistence & Multi-Session History (`database.py`)
+- Built upon an asynchronous SQLite data layer (`SQLiteDataLayer` extending `chainlit.data.BaseDataLayer` using `aiosqlite`).
+- Stores `users`, `threads`, `steps`, `elements`, and `feedback` in `chat_history.db`.
+- **Sidebar Session History**: Users can start new chats or switch between prior sessions via the Chainlit left sidebar.
+- **Multi-Turn Resumption (`@cl.on_chat_resume`)**: Clicking a past conversation reloads prior conversation turns into memory context, allowing the LLM to resolve multi-turn references and pronoun context ("it", "that finding", "the previous metric") seamlessly.
+
 ---
 
 ## 🔍 LangSmith Tracing & Observability
@@ -124,6 +139,9 @@ Ensure the following variables are configured in `.env`:
 - `QDRANT_API_KEY`: Qdrant cluster authentication token
 - `GROQ_API_KEY`: Groq API key for Llama 3.3 generation
 - `GEMINI_API_KEY`: Google AI Studio API key (for embeddings & fallback generation)
+- `EMBEDDING_MODEL`: `models/gemini-embedding-001` (3072-dim active Google AI Studio model)
+- `CHAINLIT_AUTH_SECRET`: Random 32+ character hex string for signing session JWTs
+- `CHAT_DB_PATH`: Path to SQLite database file (defaults to `chat_history.db`)
 - `LANGCHAIN_TRACING_V2`: `true` or `false`
 - `LANGCHAIN_API_KEY`: LangSmith API key (if tracing enabled)
 - `LANGCHAIN_PROJECT`: `rag-assessment`
@@ -135,9 +153,10 @@ docker build -t chatbot:1.0 .
 
 ### Step 4: Run the Application Container
 ```bash
-docker run -p 8000:8000 --env-file .env chatbot:1.0
+docker run -p 8000:8000 --env-file .env -v ${PWD}:/app chatbot:1.0
 ```
-Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**
+Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**  
+Log in with username `admin` and password `admin` (or any custom username/password). Your chat threads will automatically persist to `chat_history.db` and display in the left sidebar for instant multi-session continuation.
 
 ---
 

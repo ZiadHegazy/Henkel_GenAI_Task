@@ -75,10 +75,13 @@ style: |
 flowchart LR
     PDF["Local PDF"] --> Ingest["ingestion.py\n(Fast Text Extraction)"]
     Ingest --> Split["Splitter (500/50)\nPage & Section Bound"]
-    Split --> Qdrant[("Qdrant Cloud\ntext-embedding-004")]
+    Split --> Qdrant[("Qdrant Cloud\ngemini-embedding-001")]
     
     User(["User Query"]) --> Chainlit["Chainlit UI\n(cl.Step Tracing)"]
-    Chainlit --> Retrieve["Retrieve Node\n(Top-k Cosine)"]
+    Chainlit <-->|Async Session Store| SQLite[("SQLite DB\nchat_history.db")]
+    Chainlit --> Intent["Intent Classifier\n(predict_intent)"]
+    Intent -- "greeting" --> Greeting["Greeting Node\n(Warm Overview)"]
+    Intent -- "document_query" --> Retrieve["Retrieve Node\n(Top-k Cosine)"]
     Qdrant -.-> Retrieve
     Retrieve --> Gate{"Max Score\n>= 0.72?"}
     
@@ -87,6 +90,7 @@ flowchart LR
     Generation -.->|Failover| Fallback["Google Gemini 2.5 Flash"]
     Generation --> Valid["Pydantic CitedAnswer\nValidation"]
     Fallback --> Valid
+    Greeting --> Chainlit
     Valid --> Chainlit
     Rejection --> Chainlit
 ```
@@ -199,7 +203,22 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 
 ---
 
-## 9. Phase 5: Containerization & Deployment
+## 9. Conversational Intent Prediction & SQLite Multi-Session History
+
+### Intent Prediction (`predict_intent` & `greeting_node`)
+- **The Challenge:** Casual conversational greetings ("hello", "who are you") naturally score $< 0.72$ against indexed documents, triggering false document rejections.
+- **The Solution:** The State Machine predicts intent before vector retrieval:
+  - `greeting` $\rightarrow$ Welcoming assistant explanation of capabilities & 1-to-1 page citations.
+  - `document_query` $\rightarrow$ Enters Qdrant retrieval and $0.72$ quality gating.
+
+### SQLite Multi-Session Chat Persistence (`database.py`)
+- **Async SQLite Data Layer (`SQLiteDataLayer`):** Implements `chainlit.data.BaseDataLayer` using `aiosqlite`.
+- **Sidebar Chat History:** Users can navigate, start new conversations, and inspect previous threads.
+- **Seamless Resumption (`@cl.on_chat_resume`):** Selecting any prior chat rehydrates the in-memory conversation context, enabling full multi-turn pronoun and topic resolution across sessions.
+
+---
+
+## 10. Phase 5: Containerization & Deployment
 
 ### Production `Dockerfile`
 - **Base:** `python:3.11-slim` with `PYTHONUNBUFFERED=1`.
@@ -221,7 +240,7 @@ docker run -p 8000:8000 --env-file .env chatbot:1.0
 
 ---
 
-## 10. Performance Benchmarks & Results
+## 11. Performance Benchmarks & Results
 
 | Metrics | Deterministic Rejection | Primary Groq Generation | Gemini Fallback Generation |
 | :--- | :--- | :--- | :--- |
@@ -233,7 +252,7 @@ docker run -p 8000:8000 --env-file .env chatbot:1.0
 
 ---
 
-## 11. Engineering Summary & Future Roadmap
+## 12. Engineering Summary & Future Roadmap
 
 ### Delivered Milestones
 - ✔ **Strict 1-to-1 Page Provenance:** Completely eliminates cross-page citation errors.
