@@ -1,3 +1,5 @@
+# Production runtime dependencies for RAG Chatbot (Chainlit UI & LangGraph)
+# Lightweight footprint for Docker container (< 250MB, builds in ~20-30 seconds)
 langchain
 langgraph
 chainlit
@@ -5,6 +7,5 @@ qdrant-client
 langchain-qdrant
 langchain-groq
 langchain-google-genai
-unstructured[pdf]
 pydantic
 python-dotenv

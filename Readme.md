@@ -146,9 +146,15 @@ Open your browser and navigate to: **[http://localhost:8000](http://localhost:80
 The ingestion script is executed **offline** on your local machine (not inside the production Docker container) to populate the Qdrant vector index.
 
 ```bash
+# Install ingestion dependencies (including layout-aware unstructured[pdf]) on host
+pip install -r requirements-ingestion.txt
+
 # Ingest a PDF document into Qdrant Cloud
 python ingestion.py --file path/to/document.pdf --collection rag_documents
 
 # Ingest and recreate collection from scratch
 python ingestion.py --file path/to/document.pdf --collection rag_documents --recreate
 ```
+
+> [!TIP]
+> **Docker Image Optimization**: The Docker container only packages runtime serving dependencies (`requirements.txt`), keeping the image lean (~450MB instead of >4.5GB) and reducing build times from >15 minutes down to ~25 seconds by excluding offline computer-vision and PyTorch dependencies from the web runtime.
