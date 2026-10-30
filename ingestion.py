@@ -222,8 +222,8 @@ def extract_and_group_elements(
 
 def split_blocks_into_chunks(
     grouped_blocks: List[Dict[str, Any]],
-    chunk_size: int = 500,
-    chunk_overlap: int = 50,
+    chunk_size: int = 1200,
+    chunk_overlap: int = 250,
 ) -> List[Any]:
     """
     Split page-bounded blocks using RecursiveCharacterTextSplitter and attach
@@ -456,8 +456,8 @@ def run_pipeline(
     # 2. Stateful section tracking and page-boundary buffer grouping
     grouped_blocks = extract_and_group_elements(elements)
 
-    # 3. Recursive chunking (size=500, overlap=50) with metadata attachment
-    chunks = split_blocks_into_chunks(grouped_blocks, chunk_size=500, chunk_overlap=50)
+    # 3. Recursive chunking (size=1200, overlap=250) with metadata attachment
+    chunks = split_blocks_into_chunks(grouped_blocks, chunk_size=1200, chunk_overlap=250)
 
     if not chunks:
         logger.warning("No chunks were generated from the document. Exiting.")

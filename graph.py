@@ -52,7 +52,7 @@ load_dotenv()
 rag_logger = get_json_logger("rag_graph")
 
 REJECTION_MESSAGE = "I cannot find the answer to this question in the document."
-SIMILARITY_THRESHOLD = 0.72
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.68"))
 
 GREETING_MESSAGE = (
     "Hello! 👋 I am your Enterprise Document Assistant.\n\n"
@@ -374,8 +374,8 @@ def greeting_node(state: GraphState) -> Dict[str, Any]:
 def contextualize_query(query: str, messages: Sequence[BaseMessage]) -> str:
     """
     Resolve coreferences and anaphoras in multi-turn questions.
-    If the user asks 'How did that compare to...', reformulates to include
-    the specific subject from prior conversation for high-accuracy vector retrieval.
+    Formulates a standalone search query that incorporates necessary context
+    from prior conversation turns for high-accuracy vector retrieval.
     """
     if not messages or len(messages) <= 1:
         return query
@@ -386,15 +386,6 @@ def contextualize_query(query: str, messages: Sequence[BaseMessage]) -> str:
         history_turns.append(f"{sender}: {str(msg.content)[:250]}")
 
     if not history_turns:
-        return query
-
-    ref_tokens = {
-        "that", "it", "they", "them", "this", "these", "those",
-        "same", "former", "latter", "compare", "compared",
-        "difference", "way", "approach", "model", "system",
-    }
-    words = set(query.lower().split())
-    if not words.intersection(ref_tokens):
         return query
 
     try:
@@ -409,9 +400,9 @@ def contextualize_query(query: str, messages: Sequence[BaseMessage]) -> str:
         rephrase_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                "Given a chat history and the latest user question which references context in the chat history, "
-                "formulate a standalone search query that can be understood without the chat history. "
-                "Do NOT answer the question. Just output the standalone query concisely.",
+                "Given a chat history and the latest user question, formulate a standalone search query "
+                "that can be understood without the chat history. Do NOT answer the question. "
+                "Just output the standalone query concisely.",
             ),
             (
                 "human",
@@ -424,7 +415,7 @@ def contextualize_query(query: str, messages: Sequence[BaseMessage]) -> str:
             "question": query,
         }).content.strip()
         rephrased_clean = rephrased.split("\n")[0].strip('"').strip("'")
-        if rephrased_clean and len(rephrased_clean) > 5:
+        if rephrased_clean and len(rephrased_clean) > 3:
             rag_logger.info(f"Query reformulated for retrieval: '{query}' -> '{rephrased_clean}'")
             return rephrased_clean
     except Exception as e:
@@ -459,7 +450,7 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
 
     try:
         vector_store = get_vector_store()
-        top_k = int(os.getenv("TOP_K_CHUNKS", "5"))
+        top_k = int(os.getenv("TOP_K_CHUNKS", "8"))
         results = vector_store.similarity_search_with_score(query=search_query, k=top_k)
 
         if search_query != question:
