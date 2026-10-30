@@ -107,7 +107,7 @@ async def on_chat_start():
         "**System Capabilities:**\n"
         "- **🧠 Intent Prediction:** Recognizes conversational greetings vs. document inquiries\n"
         "- **💾 SQLite Persistence:** All chat sessions are saved and can be resumed from the left sidebar\n"
-        "- **🛡️ Quality Gate:** Cosine threshold $\\ge 0.72$ prevents hallucinations\n"
+        "- **🛡️ Quality Gate:** Cosine threshold > 0.72 prevents hallucinations\n"
         "- **⚡ Dual LLMs:** Primary Groq `llama-3.3-70b` with Google `gemini-2.5-flash` fallback\n"
         "- **📍 Provenance:** Strict 1-to-1 page citations and section headers\n\n"
         "*Type your question below or start with 'Hello' to begin.*"
