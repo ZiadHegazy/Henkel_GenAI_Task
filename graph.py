@@ -371,10 +371,72 @@ def greeting_node(state: GraphState) -> Dict[str, Any]:
     }
 
 
+def contextualize_query(query: str, messages: Sequence[BaseMessage]) -> str:
+    """
+    Resolve coreferences and anaphoras in multi-turn questions.
+    If the user asks 'How did that compare to...', reformulates to include
+    the specific subject from prior conversation for high-accuracy vector retrieval.
+    """
+    if not messages or len(messages) <= 1:
+        return query
+
+    history_turns = []
+    for msg in messages[:-1]:
+        sender = "User" if isinstance(msg, HumanMessage) or getattr(msg, "type", "") == "human" else "Assistant"
+        history_turns.append(f"{sender}: {str(msg.content)[:250]}")
+
+    if not history_turns:
+        return query
+
+    ref_tokens = {
+        "that", "it", "they", "them", "this", "these", "those",
+        "same", "former", "latter", "compare", "compared",
+        "difference", "way", "approach", "model", "system",
+    }
+    words = set(query.lower().split())
+    if not words.intersection(ref_tokens):
+        return query
+
+    try:
+        from langchain_groq import ChatGroq
+        from langchain_core.prompts import ChatPromptTemplate
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            return query
+
+        groq_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+        llm = ChatGroq(model=groq_model, groq_api_key=groq_api_key, temperature=0.0)
+        rephrase_prompt = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                "Given a chat history and the latest user question which references context in the chat history, "
+                "formulate a standalone search query that can be understood without the chat history. "
+                "Do NOT answer the question. Just output the standalone query concisely.",
+            ),
+            (
+                "human",
+                "Chat History:\n{history}\n\nLatest Question: {question}\n\nStandalone Query:",
+            ),
+        ])
+        chain = rephrase_prompt | llm
+        rephrased = chain.invoke({
+            "history": "\n".join(history_turns[-4:]),
+            "question": query,
+        }).content.strip()
+        rephrased_clean = rephrased.split("\n")[0].strip('"').strip("'")
+        if rephrased_clean and len(rephrased_clean) > 5:
+            rag_logger.info(f"Query reformulated for retrieval: '{query}' -> '{rephrased_clean}'")
+            return rephrased_clean
+    except Exception as e:
+        rag_logger.warning(f"Query contextualization bypassed due to error: {e}")
+
+    return query
+
+
 def retrieve_node(state: GraphState) -> Dict[str, Any]:
     """
     Retrieve Node:
-    Queries Qdrant for top-k chunks and logs cosine similarity metrics.
+    Queries Qdrant for top-k chunks with conversational contextualization and logs cosine similarity metrics.
     """
     question = state.get("question")
     if not question and state.get("messages"):
@@ -388,6 +450,8 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
     search_query = question
     if intent == "document_overview":
         search_query = "A Capsule Network-Based Hybrid Model for Lung Nodule Detection paper title abstract overview summary"
+    elif state.get("messages") and len(state["messages"]) > 1:
+        search_query = contextualize_query(question, state["messages"])
 
     start_time = time.perf_counter()
     documents: List[Document] = []
@@ -397,6 +461,17 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
         vector_store = get_vector_store()
         top_k = int(os.getenv("TOP_K_CHUNKS", "5"))
         results = vector_store.similarity_search_with_score(query=search_query, k=top_k)
+
+        if search_query != question:
+            raw_results = vector_store.similarity_search_with_score(query=question, k=3)
+            seen_content = set()
+            combined = []
+            for doc, score in sorted(results + raw_results, key=lambda x: x[1], reverse=True):
+                snippet = doc.page_content[:100]
+                if snippet not in seen_content:
+                    seen_content.add(snippet)
+                    combined.append((doc, score))
+            results = combined[:top_k]
 
         for doc, score in results:
             documents.append(doc)
