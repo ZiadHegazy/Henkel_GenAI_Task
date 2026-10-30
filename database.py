@@ -51,7 +51,23 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     """
 
     def __init__(self, db_path: str = DB_PATH):
-        self.db_path = db_path
+        # Gracefully handle when Docker bind-mounts a missing file as a directory
+        if os.path.isdir(db_path):
+            self.db_path = os.path.join(db_path, "chat_history.sqlite")
+            logger.warning(
+                "Configured DB_PATH '%s' is a directory (likely from a Docker volume mount). "
+                "Storing SQLite database file inside: %s",
+                db_path,
+                self.db_path,
+            )
+        else:
+            self.db_path = db_path
+
+        # Ensure parent directory exists
+        parent_dir = os.path.dirname(os.path.abspath(self.db_path))
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+
         self._init_db_sync()
 
     def _init_db_sync(self) -> None:
