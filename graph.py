@@ -247,19 +247,30 @@ def build_llm_chains():
     if not gemini_api_key:
         raise ValueError("Missing GEMINI_API_KEY or GOOGLE_API_KEY in environment variables.")
 
-    # Primary generator: Groq llama-3.3-70b-versatile
+    # Primary generator: Groq (default: openai/gpt-oss-20b)
+    groq_candidates = [
+        os.getenv("GROQ_MODEL"),
+        "openai/gpt-oss-20b",
+        "llama-3.3-70b-versatile",
+    ]
+    groq_model = next((m for m in groq_candidates if m), "openai/gpt-oss-20b")
     primary_llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model=groq_model,
         groq_api_key=groq_api_key,
         temperature=0.0,
     )
 
-    # Fallback generator: Google Gemini
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    # Fallback generator: Google Gemini (default: gemini-3.5-flash-lite)
+    gemini_candidates = [
+        os.getenv("GEMINI_MODEL"),
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+    ]
+    gemini_model = next((m for m in gemini_candidates if m), "gemini-3.5-flash-lite")
     fallback_llm = ChatGoogleGenerativeAI(
         model=gemini_model,
         google_api_key=gemini_api_key,
-        temperature=0.0,
     )
 
     prompt = ChatPromptTemplate.from_messages([
@@ -289,7 +300,7 @@ def build_llm_chains():
     fallback_chain = prompt | fallback_structured
 
     resilient_chain = primary_chain.with_fallbacks([fallback_chain])
-    return resilient_chain, prompt, primary_structured, fallback_structured
+    return resilient_chain, prompt, primary_structured, fallback_structured, groq_model, gemini_model
 
 
 # ------------------------------------------------------------------------------
@@ -455,13 +466,12 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
     history_str = "\n".join(history_turns[-6:]) if history_turns else "No prior conversation."
 
     start_time = time.perf_counter()
-    used_model = "llama-3.3-70b-versatile"
+    resilient_chain, prompt, primary_structured, fallback_structured, groq_model, gemini_model = build_llm_chains()
+    used_model = groq_model
     is_fallback = False
     cited_answer: Optional[CitedAnswer] = None
 
     try:
-        resilient_chain, prompt, primary_structured, fallback_structured = build_llm_chains()
-
         try:
             primary_chain = prompt | primary_structured
             cited_answer = primary_chain.invoke({
@@ -475,7 +485,6 @@ def generation_node(state: GraphState) -> Dict[str, Any]:
                 extra={"metadata": {"primary_error": str(groq_err)}},
             )
             is_fallback = True
-            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
             used_model = gemini_model
             fallback_chain = prompt | fallback_structured
             cited_answer = fallback_chain.invoke({
