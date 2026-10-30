@@ -231,7 +231,7 @@ To prevent `"database is locked"` errors under high-concurrency Chainlit streami
 - **Async Mutex Write Lock (`_get_write_db`)**: An internal `asyncio.Lock()` serializes all write operations (`create_step`, `update_step`, `create_element`, `update_thread`, `create_user`) cooperatively in the asyncio event loop.
 - **60-Second Busy Timeout**: All connections configure `timeout=60.0` and `PRAGMA busy_timeout = 60000;`.
 - **Public Universal ACL**: Implements `UniversalIdentifier` ensuring thread authorization always succeeds regardless of browser session cookies.
-- **Docker Mount Auto-Detection**: Handles whether `chat_history.db` is mounted as a file or folder mount automatically.
+- **Docker Mount Auto-Detection (First-Run Resilience)**: When running on a fresh host machine where `chat_history.db` does not exist yet, Docker automatically creates the host path as a directory. `database.py` detects this via `os.path.isdir()`, logs an informational warning, and safely initializes `chat_history.db/chat_history.sqlite` inside the directory, completely eliminating startup crashes or filesystem permission errors.
 
 ---
 
@@ -297,9 +297,28 @@ docker build -t henkel_rag_task .
 ```
 
 ### Step 4: Run the Application Container
-```bash
-docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_history.db henkel_rag_task
-```
+
+> [!IMPORTANT]
+> **First-Time Evaluation & Docker Volume Mount Behavior:**  
+> When evaluating this project on a fresh laptop/machine, `chat_history.db` does not exist initially on the host.
+> 
+> **Option A: Pre-create the file (Recommended):**  
+> Creating an empty file prior to launching ensures Docker mounts it cleanly as a single SQLite database file:
+> - **Linux / macOS / Git Bash:**
+>   ```bash
+>   touch chat_history.db
+>   docker run -p 8000:8000 --env-file .env -v $(pwd)/chat_history.db:/app/chat_history.db henkel_rag_task
+>   ```
+> - **Windows (PowerShell):**
+>   ```powershell
+>   New-Item chat_history.db -ItemType File -Force
+>   docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_history.db henkel_rag_task
+>   ```
+>
+> **Option B: Run directly without pre-creating:**  
+> If you run `docker run` directly without creating the file first, Docker will automatically create `chat_history.db` as a **directory** on your host.  
+> **Our system is engineered to handle this automatically**: [`database.py`](file:///d:/henkel_GenAI/database.py#L54-L64) detects `os.path.isdir(db_path)` and automatically initializes the SQLite database inside `chat_history.db/chat_history.sqlite`. The container will boot up, create the database schema, and persist your chat history without any errors!
+
 Open your browser and navigate to: **[http://localhost:8000](http://localhost:8000)**  
 Access is completely public (no login required). Your conversation threads and step telemetry automatically persist to `chat_history.db`.
 

@@ -284,9 +284,13 @@ git clone https://github.com/ZiadHegazy/Henkel_GenAI_Task.git && cd Henkel_GenAI
 cp .env.example .env
 # 3. Build container
 docker build -t henkel_rag_task .
-# 4. Run application with persistent chat database
+# 4. First-time run: Pre-create database file (or run directly with auto-directory handling)
+# Linux/macOS: touch chat_history.db
+# Windows PowerShell: New-Item chat_history.db -ItemType File -Force
 docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_history.db henkel_rag_task
 ```
+
+> **First-Time Evaluation Guarantee:** If run without pre-creating `chat_history.db`, Docker creates it as a directory. `database.py` automatically detects this (`os.path.isdir`) and writes to `chat_history.db/chat_history.sqlite` with zero crashes.
 
 ---
 

@@ -1049,9 +1049,13 @@ flowchart TD
                 <p class="text-emerald-300">docker build -t henkel_rag_task .</p>
               </div>
               <div>
-                <span class="text-slate-500"># 4. Launch with persistent chat database volume</span>
+                <span class="text-slate-500"># 4. First-run: Pre-create db file (touch / New-Item) or run directly</span>
+                <p class="text-slate-400 text-[10px]"># Linux/macOS: touch chat_history.db | Win: New-Item chat_history.db -ItemType File</p>
                 <p class="text-emerald-300">docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_history.db henkel_rag_task</p>
               </div>
+            </div>
+            <div class="p-2 bg-blue-950/40 rounded border border-blue-800/40 text-[10px] text-blue-200">
+              <strong>First-Time Run Guarantee:</strong> If executed without pre-creating, Docker mounts as a directory. <code>database.py</code> detects <code>os.path.isdir</code> and writes to <code>chat_history.db/chat_history.sqlite</code> with zero errors.
             </div>
           </div>
           <div class="text-[11px] text-emerald-400 font-mono text-center">
