@@ -153,10 +153,30 @@ class PydanticGraphState(BaseModel):
 # 2. Intent Prediction Logic
 # ------------------------------------------------------------------------------
 
+OVERVIEW_PATTERNS = [
+    "what kind of document",
+    "what document",
+    "what documents",
+    "which document",
+    "what is this document",
+    "what is the document",
+    "tell me about the document",
+    "summarize the document",
+    "summarize the paper",
+    "what is this paper",
+    "what is the paper about",
+    "what is the paper",
+    "overview of the document",
+    "about the document",
+    "what do you know",
+    "what can you tell me",
+]
+
 def predict_intent(query: str) -> str:
     """
-    Classify query intent into 'greeting' or 'document_query'.
-    Prevents casual greetings from triggering document rejection.
+    Classify query intent into 'greeting', 'document_overview', or 'document_query'.
+    Prevents casual greetings from triggering document rejection and routes
+    high-level overview questions to synthesized paper summaries.
     """
     cleaned = query.strip().lower()
     stripped = "".join(ch for ch in cleaned if ch.isalnum() or ch.isspace()).strip()
@@ -171,6 +191,10 @@ def predict_intent(query: str) -> str:
     tokens = stripped.split()
     if len(tokens) <= 3 and any(t in ("hello", "hi", "hey", "thanks", "thank", "help") for t in tokens):
         return "greeting"
+
+    for pattern in OVERVIEW_PATTERNS:
+        if pattern in cleaned:
+            return "document_overview"
 
     return "document_query"
 
@@ -360,6 +384,11 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
                 break
     question = question or ""
 
+    intent = state.get("intent", "document_query")
+    search_query = question
+    if intent == "document_overview":
+        search_query = "A Capsule Network-Based Hybrid Model for Lung Nodule Detection paper title abstract overview summary"
+
     start_time = time.perf_counter()
     documents: List[Document] = []
     similarity_scores: List[float] = []
@@ -367,7 +396,7 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
     try:
         vector_store = get_vector_store()
         top_k = int(os.getenv("TOP_K_CHUNKS", "5"))
-        results = vector_store.similarity_search_with_score(query=question, k=top_k)
+        results = vector_store.similarity_search_with_score(query=search_query, k=top_k)
 
         for doc, score in results:
             documents.append(doc)
@@ -394,8 +423,13 @@ def retrieve_node(state: GraphState) -> Dict[str, Any]:
 def route_query(state: GraphState) -> str:
     """
     Conditional Routing Function:
-    Evaluates highest similarity score against threshold (0.72).
+    Evaluates highest similarity score against threshold (0.72) or document_overview intent.
     """
+    intent = state.get("intent", "document_query")
+    if intent == "document_overview":
+        rag_logger.info("Routing decision: GENERATION (document_overview intent).")
+        return "generation"
+
     scores = state.get("similarity_scores", [])
     max_score = max(scores) if scores else 0.0
 
