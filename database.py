@@ -68,11 +68,16 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         if parent_dir and not os.path.exists(parent_dir):
             os.makedirs(parent_dir, exist_ok=True)
 
+        import asyncio
+        self._write_lock = asyncio.Lock()
         self._init_db_sync()
 
     def _init_db_sync(self) -> None:
-        """Synchronously ensure tables exist on instantiation to eliminate race conditions."""
-        with sqlite3.connect(self.db_path) as conn:
+        """Synchronously ensure tables exist and WAL mode is active to eliminate locking conflicts."""
+        with sqlite3.connect(self.db_path, timeout=60.0) as conn:
+            conn.execute("PRAGMA journal_mode = WAL;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
+            conn.execute("PRAGMA busy_timeout = 60000;")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     identifier TEXT PRIMARY KEY,
@@ -122,13 +127,24 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             """)
             conn.execute("UPDATE threads SET userIdentifier = 'default_user', userId = 'default_user'")
             conn.commit()
-            logger.info("SQLite Chat Database schema verified synchronously at: %s", self.db_path)
+            logger.info("SQLite Chat Database schema and WAL mode verified at: %s", self.db_path)
 
     @asynccontextmanager
     async def _get_db(self) -> AsyncGenerator[aiosqlite.Connection, None]:
-        async with aiosqlite.connect(self.db_path) as db:
+        """Read-only or concurrent connection yielding aiosqlite connection with 60s busy timeout."""
+        async with aiosqlite.connect(self.db_path, timeout=60.0) as db:
             db.row_factory = aiosqlite.Row
+            await db.execute("PRAGMA busy_timeout = 60000;")
             yield db
+
+    @asynccontextmanager
+    async def _get_write_db(self) -> AsyncGenerator[aiosqlite.Connection, None]:
+        """Serialized write connection with mutex lock to guarantee zero 'database is locked' collisions."""
+        async with self._write_lock:
+            async with aiosqlite.connect(self.db_path, timeout=60.0) as db:
+                db.row_factory = aiosqlite.Row
+                await db.execute("PRAGMA busy_timeout = 60000;")
+                yield db
 
     async def setup(self) -> None:
         """Initialize database tables on application startup."""
@@ -150,24 +166,25 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
                     createdAt=row["createdAt"],
                     metadata=json.loads(row["metadata"] or "{}"),
                 )
-            # Auto-create user on demand so get_user never returns None/404 for any cookie
-            now = datetime.now(timezone.utc).isoformat()
+        # Auto-create user on demand using write lock
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._get_write_db() as db:
             await db.execute(
                 "INSERT OR REPLACE INTO users (identifier, createdAt, metadata) VALUES (?, ?, ?)",
                 (identifier, now, "{}"),
             )
             await db.commit()
-            return cl.PersistedUser(
-                id=identifier,
-                identifier=identifier,
-                createdAt=now,
-                metadata={},
-            )
+        return cl.PersistedUser(
+            id=identifier,
+            identifier=identifier,
+            createdAt=now,
+            metadata={},
+        )
 
     async def create_user(self, user: cl.User) -> cl.PersistedUser:
         identifier = user.identifier or "anonymous"
         now = datetime.now(timezone.utc).isoformat()
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute(
                 "INSERT OR REPLACE INTO users (identifier, createdAt, metadata) VALUES (?, ?, ?)",
                 (identifier, now, json.dumps(user.metadata or {})),
@@ -216,12 +233,12 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         metadata: Optional[Dict] = None,
         tags: Optional[List[str]] = None,
     ) -> None:
-        async with self._get_db() as db:
+        now = datetime.now(timezone.utc).isoformat()
+        active_user = user_id or "default_user"
+
+        async with self._get_write_db() as db:
             cursor = await db.execute("SELECT id FROM threads WHERE id = ?", (thread_id,))
             exists = await cursor.fetchone()
-            now = datetime.now(timezone.utc).isoformat()
-            active_user = user_id or "default_user"
-
             if not exists:
                 await db.execute(
                     """INSERT INTO threads (id, createdAt, name, userId, userIdentifier, tags, metadata)
@@ -261,7 +278,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return UniversalIdentifier("default_user")
 
     async def delete_thread(self, thread_id: str) -> None:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
             await db.execute("DELETE FROM steps WHERE threadId = ?", (thread_id,))
             await db.execute("DELETE FROM feedback WHERE threadId = ?", (thread_id,))
@@ -302,7 +319,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
     # Step & Message Tracking
     # --------------------------------------------------------------------------
     async def create_step(self, step_dict: dict) -> None:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             created_at = step_dict.get("createdAt") or datetime.now(timezone.utc).isoformat()
             await db.execute(
                 """INSERT OR REPLACE INTO steps (id, threadId, name, type, subtype, payload, createdAt)
@@ -323,7 +340,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         await self.create_step(step_dict)
 
     async def delete_step(self, step_id: str) -> None:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute("DELETE FROM steps WHERE id = ?", (step_id,))
             await db.commit()
 
@@ -352,7 +369,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return None
 
     async def create_element(self, element: cl.Element) -> None:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute(
                 """INSERT OR REPLACE INTO elements (id, threadId, type, name, url, chainlitKey)
                    VALUES (?, ?, ?, ?, ?, ?)""",
@@ -368,7 +385,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def delete_element(self, element_id: str, thread_id: Optional[str] = None) -> None:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             if thread_id:
                 await db.execute("DELETE FROM elements WHERE id = ? AND threadId = ?", (element_id, thread_id))
             else:
@@ -376,7 +393,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
             await db.commit()
 
     async def upsert_feedback(self, feedback: cl_data.Feedback) -> str:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute(
                 "INSERT OR REPLACE INTO feedback (id, threadId, value, comment) VALUES (?, ?, ?, ?)",
                 (feedback.id, feedback.threadId, feedback.value, feedback.comment),
@@ -385,7 +402,7 @@ class SQLiteDataLayer(cl_data.BaseDataLayer):
         return feedback.id
 
     async def delete_feedback(self, feedback_id: str) -> bool:
-        async with self._get_db() as db:
+        async with self._get_write_db() as db:
             await db.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
             await db.commit()
         return True
