@@ -93,6 +93,81 @@ flowchart TD
 
 ---
 
+## 📚 Ingested Document Profile & Research Summary (`pdf1_rag.pdf`)
+
+The knowledge base indexes the scientific publication:
+> **"A Capsule Network-Based Hybrid Model for Lung Nodule Detection"**  
+> *Christoph Mattmann, Dominik Hahn, Marco Klaiber, Sören Wagner, Marc Fernandes, Manfred Rössle*  
+> Published in: **Procedia Computer Science 270 (2025) 1517–1526** (29th KES International Conference).
+
+### Executive Summary of the Paper
+* **Core Problem:** Lung cancer is among the deadliest cancers worldwide. Early detection on Computed Tomography (CT) scans saves lives, but manual radiologist screening across hundreds of 2D/3D CT slices is time-consuming and error-prone. Traditional Convolutional Neural Network (CNN) Computer-Aided Detection (CAD) systems require massive annotated datasets, struggle with rotational/viewpoint spatial variations, and lack feature interpretability.
+* **Proposed Solution:** A novel **three-stage hybrid CAD pipeline** combining:
+  1. **Stage 1 (Initial Detection):** Fast candidate nodule bounding box proposal using YOLOv11.
+  2. **Stage 2 (Verification & False Positive Reduction):** Spatial feature encoding and nodule classification using a Capsule Network (CapsNet).
+  3. **Stage 3 (Refined Detection):** Secondary YOLOv11 detection stage incorporating CapsNet verification features.
+* **Dataset Methodology:** Evaluated on a combined cohort of **LIDC-IDRI** and **Lung-PET-CT-Dx**:
+  - *Patient Selection Rule:* From LIDC-IDRI, **only patients with no nodules in their entire CT scan were used** as negative controls. Patients with nodules were strictly excluded because LIDC-IDRI does not differentiate between benign and malignant nodules (which could be cancer, scar tissue, or benign granulomas).
+  - *Cancerous Cases:* Verified malignant nodules were extracted from Lung-PET-CT-Dx.
+* **Key Findings & Experimental Results:**
+  - **Cropped Image CapsNet:** Classifying detected nodule Regions of Interest (ROI) achieved **95.57% accuracy**, significantly outperforming the Full Image CapsNet (**93.07%**).
+  - **Pipeline Detection Accuracy:** The complete three-stage hybrid pipeline achieved **89.98% overall detection accuracy**.
+  - **Error Trade-off:** While precision improved, overall accuracy was slightly lower than standalone YOLOv11 (**90.79%**) due to an increased rate of **False Negatives (FNs)**, predominantly in *Adenocarcinoma tumors* and *large cell carcinomas*.
+
+---
+
+## 🧪 Sample Evaluation Questions & Ground Truth
+
+Users and evaluators can interact with the system using these verified conversation scenarios:
+
+### Scenario A: Multi-Turn Coreference Resolution Benchmark
+*Tests conversational query contextualization, pronoun resolution, and 1-to-1 page citations.*
+
+| Turn | User Question | Expected Answer & Technical Ground Truth | Source Provenance |
+| :--- | :--- | :--- | :--- |
+| **Turn 1** | *"What was the overall detection accuracy of the proposed three-stage pipeline?"* | The proposed three-stage pipeline achieved an overall detection accuracy of **89.98%**. | Page 1, Page 6 |
+| **Turn 2** | *"How did that compare to using the standalone detection model by itself?"* | Standalone YOLOv11 achieved **90.79%** detection accuracy, which is slightly higher than the 89.98% of the hybrid pipeline. | Page 1, Page 6 |
+| **Turn 3** | *"What specific type of error caused the accuracy to drop in the hybrid approach?"* | The drop in overall accuracy was caused by an increased number of **False Negatives (FNs)** in the verification stage. | Page 1, Page 6 |
+| **Turn 4** | *"Which specific tumor types from the dataset were most frequently misclassified in that way?"* | **Adenocarcinoma tumors** and **large cell carcinomas** showed an increased proportion of False Negatives. | Page 7 |
+
+---
+
+### Scenario B: Dataset Inclusion & Methodology Benchmark
+*Tests multi-turn reasoning and precise retrieval of scientific exclusion criteria.*
+
+| Turn | User Question | Expected Answer & Technical Ground Truth | Source Provenance |
+| :--- | :--- | :--- | :--- |
+| **Turn 1** | *"Which two datasets were combined to evaluate this approach?"* | The approach was evaluated on a combination of the **LIDC-IDRI** dataset and the **Lung-PET-CT-Dx** dataset. | Page 4 (Section 3.1) |
+| **Turn 2** | *"Were all the patients from the first dataset included in the training process?"* | **No.** Only patients from LIDC-IDRI who had **no nodules in the entire CT image** were included as negative controls. | Page 4 (Section 3.1) |
+| **Turn 3** | *"Why were the other patients excluded?"* | Because LIDC-IDRI does not differentiate between benign and malignant nodules, meaning nodules could represent cancerous tumors, scar tissue, or benign findings. | Page 4 (Section 3.1) |
+
+---
+
+### Scenario C: Architectural & Comparative Deep-Dives
+*Tests synthesis of technical rationale and model comparison.*
+
+* **Question:** *"What are the three stages of the hybrid model proposed in the paper?"*  
+  **Expected Answer:** Stage 1: Initial nodule candidate detection via YOLOv11; Stage 2: False positive verification and feature encoding via Capsule Network (CapsNet); Stage 3: Refined nodule detection via secondary YOLOv11. *(Pages 1, 3)*
+* **Question:** *"Why was a Capsule Network chosen for the verification stage instead of a standard CNN?"*  
+  **Expected Answer:** Capsule Networks preserve spatial hierarchies and viewpoint relationships between features (using vector-based capsules and dynamic routing) and require significantly fewer training samples than traditional CNNs. *(Pages 1, 3)*
+* **Question:** *"How did the Cropped Image CapsNet compare to the Full Image CapsNet classifier?"*  
+  **Expected Answer:** The Cropped Image CapsNet (using only nodule ROIs) achieved **95.57% classification accuracy**, outperforming the Full Image CapsNet which achieved **93.07%**. *(Pages 1, 6)*
+
+---
+
+### Scenario D: Conversational Greeting & Out-of-Domain Semantic Quality Gate
+*Tests intent classification routing and deterministic $0.00 cost rejection.*
+
+* **Greeting (Intent Prediction Bypass):**  
+  *User:* *"Hello, what can you help me with?"*  
+  *Assistant:* Welcoming greeting explaining system capabilities, 1-to-1 page citations, and summarizing the indexed lung cancer nodule detection paper without hitting the vector database.
+* **Out-of-Domain Query (Semantic Gate $\text{Score} < 0.68$):**  
+  *User:* *"What was Apple's stock closing price on NASDAQ yesterday?"*  
+  *Cosine Score:* `~0.56` ($< 0.68$) $\rightarrow$ *Deterministic Rejection:*  
+  > *"I cannot find the answer to this question in the document."* (0 LLM tokens, $< 80\text{ ms}$).
+
+---
+
 ## 📐 Key Design Decisions & Technical Architecture
 
 ### 1. Document Partitioning & Coherent Chunking Strategy (`ingestion.py`)

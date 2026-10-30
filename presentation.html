@@ -61,7 +61,7 @@
         <!-- Populated via JS -->
       </select>
       <div class="flex items-center bg-slate-800/80 rounded-lg p-1 border border-slate-700/80 text-xs text-slate-300">
-        <span id="slideCounter" class="px-2 font-mono font-medium">01 / 12</span>
+        <span id="slideCounter" class="px-2 font-mono font-medium">01 / 14</span>
       </div>
       <div class="flex items-center gap-1.5">
         <button id="prevBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">
@@ -76,7 +76,7 @@
 
   <!-- Progress Bar -->
   <div class="w-full bg-slate-900 h-1">
-    <div id="progressBar" class="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-1 transition-all duration-300" style="width: 8.33%;"></div>
+    <div id="progressBar" class="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 h-1 transition-all duration-300" style="width: 7.14%;"></div>
   </div>
 
   <!-- Main Slide Container -->
@@ -217,9 +217,153 @@
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 3: End-to-End System Architecture -->
+    <!-- SLIDE 3: Ingested Research Paper Profile -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-5 w-full" data-title="3. System Architecture">
+    <div class="slide flex-col space-y-5 w-full" data-title="3. Ingested Document Profile">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Document Ingested: pdf1_rag.pdf</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Scientific Research Paper Profile & Summary</h2>
+        </div>
+        <span class="badge-blue px-3 py-1 rounded-full text-xs font-mono">Procedia Computer Science 2025</span>
+      </div>
+
+      <!-- Publication Meta Banner -->
+      <div class="p-4 bg-slate-900/90 border border-slate-800 rounded-xl flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white">"A Capsule Network-Based Hybrid Model for Lung Nodule Detection"</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Christoph Mattmann, Dominik Hahn, Marco Klaiber, Sören Wagner, Marc Fernandes, Manfred Rössle</p>
+        </div>
+        <div class="text-right">
+          <span class="badge-purple px-2.5 py-1 rounded text-[11px] font-mono">KES 2025 • Elsevier</span>
+          <p class="text-[10px] text-slate-500 font-mono mt-1">10 Pages • 65 Coherent Chunks</p>
+        </div>
+      </div>
+
+      <!-- 4 Core Document Pillars -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div class="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-2">
+          <div class="flex items-center gap-2 text-blue-400 font-bold">
+            <span>🔬</span>
+            <span>Clinical Problem & Motivation</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">
+            Lung cancer is among the deadliest cancers. Early detection on CT scans saves lives, but manual radiologist screening is error-prone. Traditional CNN CAD systems lack interpretability, require massive datasets, and struggle with viewpoint spatial transformations.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-2">
+          <div class="flex items-center gap-2 text-purple-400 font-bold">
+            <span>⚙️</span>
+            <span>Three-Stage Hybrid Pipeline</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">
+            <strong>Stage 1:</strong> Initial nodule proposal via YOLOv11.<br>
+            <strong>Stage 2:</strong> Verification & feature encoding via Capsule Network (CapsNet).<br>
+            <strong>Stage 3:</strong> Refined secondary detection via enhanced YOLOv11.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-2">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold">
+            <span>📊</span>
+            <span>Dataset & Patient Selection</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">
+            Combined <strong>LIDC-IDRI</strong> and <strong>Lung-PET-CT-Dx</strong>. Crucially, from LIDC-IDRI only patients with <em>no nodules in their entire CT image</em> were included. Patients with nodules were excluded because LIDC-IDRI does not distinguish benign from malignant nodules.
+          </p>
+        </div>
+
+        <div class="bg-slate-900/80 border border-slate-800 p-4 rounded-xl space-y-2">
+          <div class="flex items-center gap-2 text-amber-400 font-bold">
+            <span>📈</span>
+            <span>Key Experimental Metrics & Error Trade-off</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">
+            • <strong>Cropped CapsNet ROI:</strong> 95.57% accuracy vs. 93.07% Full Image.<br>
+            • <strong>Pipeline Detection Accuracy:</strong> 89.98% (vs. Standalone YOLOv11: 90.79%).<br>
+            • <strong>Error Analysis:</strong> Accuracy drop caused by False Negatives in <em>Adenocarcinoma</em> and <em>large cell carcinomas</em>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 4: Benchmark Evaluation Scenarios & Sample Questions -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-5 w-full" data-title="4. Benchmark Questions">
+      <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
+        <div>
+          <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Ground-Truth Test Suite</span>
+          <h2 class="text-2xl font-bold text-white mt-1">Benchmark Evaluation Scenarios & Sample Questions</h2>
+        </div>
+        <span class="badge-emerald px-3 py-1 rounded-full text-xs font-mono">100% Verifiable</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <!-- Scenario A: Multi-Turn Coreference -->
+        <div class="bg-slate-900/90 border border-blue-900/50 p-4 rounded-xl flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-blue-400 font-bold">Scenario A: Multi-Turn Coreference Flow</span>
+              <span class="badge-blue px-2 py-0.5 rounded text-[10px]">4-Turn Dialog</span>
+            </div>
+            <ul class="space-y-2 text-slate-300">
+              <li class="p-1.5 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400 font-mono text-[10px]">T1:</span> "What was the overall detection accuracy of the proposed pipeline?"<br>
+                <span class="text-emerald-400 font-semibold">&rarr; 89.98%</span> <span class="text-slate-500 font-mono">(Pages 1, 6)</span>
+              </li>
+              <li class="p-1.5 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400 font-mono text-[10px]">T2:</span> "How did that compare to using standalone detection alone?"<br>
+                <span class="text-emerald-400 font-semibold">&rarr; Standalone YOLOv11 was 90.79%</span> <span class="text-slate-500 font-mono">(Pages 1, 6)</span>
+              </li>
+              <li class="p-1.5 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400 font-mono text-[10px]">T3:</span> "What specific error type caused the accuracy to drop?"<br>
+                <span class="text-emerald-400 font-semibold">&rarr; Increased False Negatives (FNs)</span> <span class="text-slate-500 font-mono">(Pages 1, 6)</span>
+              </li>
+              <li class="p-1.5 bg-slate-950 rounded border border-slate-800">
+                <span class="text-slate-400 font-mono text-[10px]">T4:</span> "Which tumor types were most frequently misclassified in that way?"<br>
+                <span class="text-emerald-400 font-semibold">&rarr; Adenocarcinoma & Large Cell Carcinoma</span> <span class="text-slate-500 font-mono">(Page 7)</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Scenario B & C: Methodology & Quality Gate -->
+        <div class="space-y-3">
+          <!-- Scenario B: Dataset Exclusion -->
+          <div class="bg-slate-900/90 border border-purple-900/50 p-4 rounded-xl">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-purple-400 font-bold">Scenario B: Dataset Exclusion Criteria</span>
+              <span class="badge-purple px-2 py-0.5 rounded text-[10px]">3-Turn Dialog</span>
+            </div>
+            <div class="space-y-1.5 text-slate-300">
+              <p class="text-[11px]"><strong class="text-white">Q:</strong> "Were all patients from the first dataset included in training?"</p>
+              <p class="text-[11px] text-emerald-400 font-semibold">&rarr; No, only nodule-free patients were used as controls. (Page 4)</p>
+              <p class="text-[11px]"><strong class="text-white">Q:</strong> "Why were the other patients excluded?"</p>
+              <p class="text-[11px] text-emerald-400 font-semibold">&rarr; LIDC-IDRI cannot distinguish benign vs. malignant nodules. (Page 4)</p>
+            </div>
+          </div>
+
+          <!-- Scenario C & D: Rejection Gate & Intent -->
+          <div class="bg-slate-900/90 border border-amber-900/50 p-4 rounded-xl">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-amber-400 font-bold">Scenario C & D: Rejection Gate & Intent</span>
+              <span class="badge-amber px-2 py-0.5 rounded text-[10px]">Zero Hallucination</span>
+            </div>
+            <div class="space-y-1 text-slate-300 text-[11px]">
+              <p><strong class="text-white">Casual Greeting:</strong> "Hello, what document do you have?" &rarr; Welcoming overview with zero LLM vector latency.</p>
+              <p><strong class="text-white">Out-of-Domain Noise:</strong> "What is Apple's stock price?" &rarr; Score ~0.56 &lt; 0.68: Deterministic Rejection ($0.00 cost).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE 5: End-to-End System Architecture -->
+    <!-- ===================================================================== -->
+    <div class="slide flex-col space-y-5 w-full" data-title="5. System Architecture">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">End-to-End Pipeline</span>
@@ -230,7 +374,7 @@
 
       <!-- Mermaid Diagram Card -->
       <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-center items-center">
-        <div class="w-full overflow-x-auto flex justify-center py-2">
+        <div class="w-full overflow-x-auto flex justify-center py-1">
           <pre class="mermaid text-xs">
 flowchart LR
     PDF["📄 pdf1_rag.pdf"] --> Ingest["Fast Text Extraction
@@ -293,9 +437,9 @@ Validation"]
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 4: Phase 1 & 2 - Offline Document Ingestion Deep Dive -->
+    <!-- SLIDE 6: Phase 1 & 2 - Offline Document Ingestion Deep Dive -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="4. Document Ingestion">
+    <div class="slide flex-col space-y-6 w-full" data-title="6. Document Ingestion">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 1 & 2: Ingestion Pipeline</span>
@@ -358,9 +502,9 @@ Validation"]
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 5: Phase 3 - LangGraph State Machine Workflow -->
+    <!-- SLIDE 7: Phase 3 - LangGraph State Machine Workflow -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-5 w-full" data-title="5. LangGraph Workflow Graph">
+    <div class="slide flex-col space-y-5 w-full" data-title="7. LangGraph Workflow Graph">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 3: Graph Architecture</span>
@@ -446,7 +590,7 @@ flowchart TD
               </div>
             </div>
             <p class="text-[11px] text-slate-400 mt-1">
-              Empirically calibrated: legitimate domain queries score 0.70 - 0.90, while out-of-domain noise (e.g. Apple stock prices) scores ~0.56, guaranteeing zero false rejections.
+              Legitimate domain queries score 0.70 - 0.90, while out-of-domain noise (e.g. Apple stock prices) scores ~0.56, guaranteeing zero false rejections.
             </p>
           </div>
         </div>
@@ -454,9 +598,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 6: Multi-Provider LLM Resilience (.with_fallbacks) -->
+    <!-- SLIDE 8: Multi-Provider LLM Resilience (.with_fallbacks) -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="6. LLM Resilience & Fallback">
+    <div class="slide flex-col space-y-6 w-full" data-title="8. LLM Resilience & Fallback">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Resilience Architecture</span>
@@ -537,9 +681,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 7: Pydantic Schema Enforcement & Prompt Grounding -->
+    <!-- SLIDE 9: Pydantic Schema Enforcement & Prompt Grounding -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="7. Schema Enforcement">
+    <div class="slide flex-col space-y-6 w-full" data-title="9. Schema Enforcement">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Grounding & Provenance</span>
@@ -603,9 +747,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 8: Production Observability (JSON Logging & Local Telemetry) -->
+    <!-- SLIDE 10: Production Observability (JSON Logging & Local Telemetry) -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="8. Telemetry & Observability">
+    <div class="slide flex-col space-y-6 w-full" data-title="10. Telemetry & Observability">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Enterprise Telemetry</span>
@@ -684,9 +828,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 9: Phase 4 - Chainlit UI & Native Step Tracing -->
+    <!-- SLIDE 11: Phase 4 - Chainlit UI & Native Step Tracing -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="9. Chainlit UI & Tracing">
+    <div class="slide flex-col space-y-6 w-full" data-title="11. Chainlit UI & Tracing">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 4: User Experience</span>
@@ -771,9 +915,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 10: Multi-Turn Context & SQLite WAL Concurrency -->
+    <!-- SLIDE 12: Multi-Turn Context & SQLite WAL Concurrency -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="10. Multi-Turn & SQLite WAL">
+    <div class="slide flex-col space-y-6 w-full" data-title="12. Multi-Turn & SQLite WAL">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Conversational Intelligence & Storage</span>
@@ -846,9 +990,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 11: Phase 5 - Containerization & Deployment -->
+    <!-- SLIDE 13: Phase 5 - Containerization & Deployment -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-6 w-full" data-title="11. Containerization & Deployment">
+    <div class="slide flex-col space-y-6 w-full" data-title="13. Containerization & Deployment">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Phase 5: Production Deployment</span>
@@ -918,9 +1062,9 @@ flowchart TD
     </div>
 
     <!-- ===================================================================== -->
-    <!-- SLIDE 12: Summary, Benchmarks & Future Roadmap -->
+    <!-- SLIDE 14: Summary, Benchmarks & Future Roadmap -->
     <!-- ===================================================================== -->
-    <div class="slide flex-col space-y-5 w-full" data-title="12. Summary & Roadmap">
+    <div class="slide flex-col space-y-5 w-full" data-title="14. Summary & Roadmap">
       <div class="border-b border-slate-800 pb-3 flex justify-between items-end">
         <div>
           <span class="text-xs font-mono text-blue-400 uppercase tracking-widest">Architectural Evaluation</span>

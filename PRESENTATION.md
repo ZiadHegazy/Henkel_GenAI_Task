@@ -70,8 +70,37 @@ style: |
 | **SQLite Concurrency Contention** | "Database is locked" under rapid streaming steps | **WAL Mode + Async Mutex Write Lock + 60s Busy Timeout** |
 
 ---
+## 2. Ingested Research Paper Profile (`pdf1_rag.pdf`)
 
-## 2. End-to-End System Architecture
+### "A Capsule Network-Based Hybrid Model for Lung Nodule Detection"
+*Christoph Mattmann et al., Procedia Computer Science 270 (2025) 1517–1526 (Elsevier / KES 2025)*
+
+| Domain Dimension | Technical Paper Ground Truth |
+| :--- | :--- |
+| **Clinical Objective** | Early automated detection and classification of lung cancer nodules on Computed Tomography (CT) scans. |
+| **CAD Architecture** | **Three-Stage Hybrid Pipeline:** Stage 1 YOLOv11 $\rightarrow$ Stage 2 CapsNet Verification $\rightarrow$ Stage 3 YOLOv11 Refinement. |
+| **Datasets Evaluated** | Combined **LIDC-IDRI** (negative controls) and **Lung-PET-CT-Dx** (positive cancerous cases). |
+| **Patient Exclusion** | LIDC-IDRI patients with nodules excluded (dataset does not differentiate benign vs. malignant nodules). |
+| **Key Performance** | **Cropped ROI CapsNet: 95.57%** vs. Full Image: 93.07% • **Overall Pipeline Accuracy: 89.98%** (vs. Standalone YOLOv11: 90.79%). |
+| **Identified Bottleneck** | Accuracy drop driven by increased **False Negatives (FNs)** in Adenocarcinoma and large cell carcinomas. |
+---
+## 3. Benchmark Evaluation Scenarios & Sample Questions
+
+### Validated Ground-Truth Conversations for System Evaluation
+
+* **Multi-Turn Coreference Flow (Tracking accuracy & tumor types):**
+  - *Turn 1:* *"What was the overall detection accuracy of the proposed three-stage pipeline?"* $\rightarrow$ **89.98%** *(Page 1, 6)*
+  - *Turn 2:* *"How did that compare to using the standalone detection model by itself?"* $\rightarrow$ **90.79% (YOLOv11)** *(Page 1, 6)*
+  - *Turn 3:* *"What specific type of error caused the accuracy to drop in the hybrid approach?"* $\rightarrow$ **False Negatives** *(Page 1, 6)*
+  - *Turn 4:* *"Which specific tumor types were most frequently misclassified in that way?"* $\rightarrow$ **Adenocarcinoma & Large Cell** *(Page 7)*
+* **Scientific Methodology & Patient Selection:**
+  - *Turn 1:* *"Which two datasets were combined to evaluate this approach?"* $\rightarrow$ **LIDC-IDRI & Lung-PET-CT-Dx** *(Page 4)*
+  - *Turn 2:* *"Were all patients from the first dataset included in training?"* $\rightarrow$ **No, only nodule-free patients** *(Page 4)*
+  - *Turn 3:* *"Why were the other patients excluded?"* $\rightarrow$ **Indeterminate nodule malignancy in LIDC-IDRI** *(Page 4)*
+* **Quality Gate Rejection:** *"What is the NASDAQ closing price of Apple stock?"* $\rightarrow$ **Cosine ~0.56 < 0.68: Deterministic Rejection**
+---
+
+## 4. End-to-End System Architecture
 
 ```mermaid
 flowchart LR
@@ -103,7 +132,7 @@ flowchart LR
 
 ---
 
-## 3. Phase 1 & 2: Stateful PDF Ingestion (`ingestion.py`)
+## 5. Phase 1 & 2: Stateful PDF Ingestion (`ingestion.py`)
 
 ### Fast Digital Text Extraction & Coherent Page-Boundary Flushes
 - **Fast Digital Text Extraction:** Uses native `pypdf` extraction. Assumes digital text only and explicitly bypasses all embedded images, eliminating all OCR and vision model bloat.
@@ -114,7 +143,7 @@ flowchart LR
 
 ---
 
-## 4. Phase 3: LangGraph State Machine Workflow
+## 6. Phase 3: LangGraph State Machine Workflow
 
 ```mermaid
 flowchart TD
@@ -146,7 +175,7 @@ flowchart TD
 
 ---
 
-## 5. Multi-Provider Resilience (`.with_fallbacks()`)
+## 7. Multi-Provider Resilience (`.with_fallbacks()`)
 
 ### Primary Generator: Groq Cloud
 - Model: `openai/gpt-oss-20b` (Default in `.env`)
@@ -164,7 +193,7 @@ flowchart TD
 
 ---
 
-## 6. Strict Provenance Enforcement: `CitedAnswer`
+## 8. Strict Provenance Enforcement: `CitedAnswer`
 
 ### Pydantic Output Contract
 ```python
@@ -184,7 +213,7 @@ class CitedAnswer(BaseModel):
 
 ---
 
-## 7. Phase 3: Observability & Telemetry (`logger.py`)
+## 9. Phase 3: Observability & Telemetry (`logger.py`)
 
 ### Structured JSON Logging to `stdout`
 Emits machine-readable records for Datadog / CloudWatch / ELK:
@@ -207,7 +236,7 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 
 ---
 
-## 8. Phase 4: Chainlit UI & Native Step Tracing (`app.py`)
+## 10. Phase 4: Chainlit UI & Native Step Tracing (`app.py`)
 
 ### Interactive Native Tracing with `cl.Step`
 1. **`cl.Step("Intent Prediction")`**: Classifies input as casual conversational greetings vs. document queries.
@@ -221,7 +250,7 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 
 ---
 
-## 9. Multi-Turn Query Contextualization & SQLite WAL Concurrency
+## 11. Multi-Turn Query Contextualization & SQLite WAL Concurrency
 
 ### Multi-Turn Conversational Query Contextualization (`contextualize_query`)
 - **The Challenge:** Multi-turn follow-up queries (e.g. *"How did that compare to using the standalone model?"* or *"Why were the other patients excluded?"*) rely on implicit conversational references that fail naive vector retrieval.
@@ -238,7 +267,7 @@ Emits machine-readable records for Datadog / CloudWatch / ELK:
 
 ---
 
-## 10. Phase 5: Containerization & Deployment
+## 12. Phase 5: Containerization & Deployment
 
 ### Production `Dockerfile`
 - **Base:** `python:3.11-slim` with `PYTHONUNBUFFERED=1`.
@@ -261,7 +290,7 @@ docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_hist
 
 ---
 
-## 11. Performance Benchmarks & Results
+## 13. Performance Benchmarks & Results
 
 | Metrics | Deterministic Rejection | Primary Groq Generation | Gemini Fallback Generation |
 | :--- | :--- | :--- | :--- |
@@ -274,7 +303,7 @@ docker run -p 8000:8000 --env-file .env -v ${PWD}/chat_history.db:/app/chat_hist
 
 ---
 
-## 12. Engineering Summary & Future Roadmap
+## 14. Engineering Summary & Future Roadmap
 
 ### Delivered Milestones
 - ✔ **Strict 1-to-1 Page Provenance:** Completely eliminates cross-page citation errors.
